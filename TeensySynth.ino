@@ -4,24 +4,24 @@
 #include <SD.h>
 #include <SerialFlash.h>
 
-//#define SYNTH_FILTER
-#define AMEMORY 12
-#define NVOICES 8
+// define SYNTH_FULL to enable all features (one filter and envelope per oscillator)
+#define SYNTH_FULL
 
-struct Oscillator {
-  AudioSynthWaveform*       wf;
-#ifdef SYNTH_FILTER
-  AudioFilterStateVariable* filt;
-  AudioMixer4*              mix;
-  AudioEffectEnvelope*      env;
-#endif
-  int note;
-  int idx;
-  uint8_t velocity;
-};
+// define SYNTH_DEBUG to enable debug logging on HWSerial 1 (digital pins 0/1)
+#define SYNTH_DEBUG
 
-#ifdef SYNTH_FILTER
+// define IGNORE_OTHERCHANNELS to only listen to MIDI channel 1
+#define IGNORE_OTHERCHANNELS
 
+// define MIDI channel
+#define SYNTH_MIDICHANNEL 1
+
+// define tuning of A4 in Hz
+#define SYNTH_TUNING 440
+
+// Audio architecture generated with
+// http://www.pjrc.com/teensy/gui/
+#ifdef SYNTH_FULL
 // GUItool: begin automatically generated code
 AudioSynthWaveform       waveform1;      //xy=79,220
 AudioSynthWaveform       waveform2;      //xy=84,293
@@ -134,20 +134,7 @@ AudioConnection          patchCord69(mixer5, 0, i2s1, 0);
 AudioConnection          patchCord70(mixer6, 0, i2s1, 1);
 AudioControlSGTL5000     sgtl5000_1;     //xy=192,114
 // GUItool: end automatically generated code
-
-Oscillator oscs[NVOICES] = {
-  { &waveform1, &filter1, &mixer7,  &envelope1, -1, 0, 0 },
-  { &waveform2, &filter2, &mixer8,  &envelope2, -1, 0, 0 },
-  { &waveform3, &filter3, &mixer9,  &envelope3, -1, 0, 0 },
-  { &waveform4, &filter4, &mixer10, &envelope4, -1, 0, 0 },
-  { &waveform5, &filter5, &mixer11, &envelope5, -1, 0, 0 },
-  { &waveform6, &filter6, &mixer12, &envelope6, -1, 0, 0 },
-  { &waveform7, &filter7, &mixer13, &envelope7, -1, 0, 0 },
-  { &waveform8, &filter8, &mixer14, &envelope8, -1, 0, 0 },
-};
-
 #else
-
 // GUItool: begin automatically generated code
 AudioSynthWaveform       waveform1;      //xy=395,244
 AudioSynthWaveform       waveform2;      //xy=400,317
@@ -188,7 +175,39 @@ AudioConnection          patchCord21(mixer5, 0, i2s1, 0);
 AudioConnection          patchCord22(mixer6, 0, i2s1, 1);
 AudioControlSGTL5000     sgtl5000_1;     //xy=192,114
 // GUItool: end automatically generated code
+#endif
 
+//////////////////////////////////////////////////////////////////////
+// Data types and lookup tables
+//////////////////////////////////////////////////////////////////////
+struct Oscillator {
+  AudioSynthWaveform*       wf;
+#ifdef SYNTH_FULL
+  AudioFilterStateVariable* filt;
+  AudioMixer4*              mix;
+  AudioEffectEnvelope*      env;
+#endif
+  int note;
+  int idx;
+  uint8_t velocity;
+};
+
+#define NVOICES 8
+
+#ifdef SYNTH_FULL
+#define AMEMORY 40
+Oscillator oscs[NVOICES] = {
+  { &waveform1, &filter1, &mixer7,  &envelope1, -1, 0, 0 },
+  { &waveform2, &filter2, &mixer8,  &envelope2, -1, 0, 0 },
+  { &waveform3, &filter3, &mixer9,  &envelope3, -1, 0, 0 },
+  { &waveform4, &filter4, &mixer10, &envelope4, -1, 0, 0 },
+  { &waveform5, &filter5, &mixer11, &envelope5, -1, 0, 0 },
+  { &waveform6, &filter6, &mixer12, &envelope6, -1, 0, 0 },
+  { &waveform7, &filter7, &mixer13, &envelope7, -1, 0, 0 },
+  { &waveform8, &filter8, &mixer14, &envelope8, -1, 0, 0 },
+};
+#else
+#define AMEMORY 12
 Oscillator oscs[NVOICES] = {
   { &waveform1, -1, 0, 0 },
   { &waveform2, -1, 0, 0 },
@@ -199,11 +218,23 @@ Oscillator oscs[NVOICES] = {
   { &waveform7, -1, 0, 0 },
   { &waveform8, -1, 0, 0 },
 };
-
 #endif
 
-#define SYNTH_DEBUG
-#define IGNORE_OTHERCHANNELS
+enum PolyMode_t {
+  POLY,
+  MONO,
+  //MONO_L,
+  //MONO_R,
+  POLYMODE_N,
+};
+
+enum FilterMode_t {
+  LOWPASS,
+  BANDPASS,
+  HIGHPASS,
+  FILTEROFF,
+  FILTERMODE_N,
+};
 
 #define NPROGS 7
 uint8_t progs[NPROGS] = {
@@ -216,39 +247,41 @@ uint8_t progs[NPROGS] = {
   WAVEFORM_SAMPLE_HOLD,
 };
 
-enum PolyMode_t {
-  POLY,
-  MONO_L,
-  MONO_R,
-  MONO,
-};
-
-uint8_t midiChannel    = 1;
-float   tuningPitch    = 440;
+//////////////////////////////////////////////////////////////////////
+// Global variables
+//////////////////////////////////////////////////////////////////////
 float   masterVolume   = 0.3;
 uint8_t currentProgram = 3;
 
-PolyMode_t polyMode;
+PolyMode_t   polyMode;
+FilterMode_t filterMode;
 bool       sustainPressed;
 float      channelVolume;
 float      panorama;
 float      pulseWidth;
 float      pitchBend;
 
-inline void resetAll() {
-  polyMode       = POLY;
-  sustainPressed = false;
-  channelVolume  = 1.0;
-  panorama       = 0.5;
-  pulseWidth     = 0.5;
-  pitchBend      = 0;
+int8_t noteBuffer[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
-#ifdef SYNTH_FILTER
+//////////////////////////////////////////////////////////////////////
+// Parameter control functions
+//////////////////////////////////////////////////////////////////////
+inline void updateFilterMode() {
+#ifdef SYNTH_FULL
   for (uint8_t i=0; i < NVOICES; ++i) {
-    oscs[i].mix->gain(0,0);
-    oscs[i].mix->gain(1,0);
-    oscs[i].mix->gain(2,0);
-    oscs[i].mix->gain(3,1);
+    for (uint8_t fm=0; fm < FILTERMODE_N; ++fm) {
+      if (fm == filterMode)
+        oscs[i].mix->gain(fm,1);
+      else
+        oscs[i].mix->gain(fm,0);
+    }
+  }
+#endif
+}
+
+inline void updateEnvelope() {
+#ifdef SYNTH_FULL
+  for (uint8_t i=0; i < NVOICES; ++i) {
     oscs[i].env->attack(50);
     oscs[i].env->hold(50);
     oscs[i].env->decay(50);
@@ -256,32 +289,17 @@ inline void resetAll() {
   }
 #endif
 }
+inline void resetAll() {
+  polyMode       = POLY;
+  filterMode     = FILTEROFF;
+  sustainPressed = false;
+  channelVolume  = 1.0;
+  panorama       = 0.5;
+  pulseWidth     = 0.5;
+  pitchBend      = 0;
 
-inline void oscOn( Oscillator& osc, int8_t note, uint8_t velocity) {
-  // Sets all notes as an offset of A4 (#69)
-  int8_t noteNumberAfterOffset = note - 69; 
-  osc.wf->frequency(tuningPitch * pow(2,noteNumberAfterOffset/12.+pitchBend));
-  osc.wf->amplitude(velocity/127.*channelVolume);
-#ifdef SYNTH_FILTER
-  osc.env->noteOn();
-#endif
-  osc.note = note;
-  osc.velocity = velocity;
-}
-
-inline void oscOff( Oscillator& osc) {
-  osc.wf->amplitude(0);
-#ifdef SYNTH_FILTER
-  osc.env->noteOff();
-#endif
-  osc.note = -1;
-  osc.idx  = 0;
-}
-
-inline void allOff() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    oscOff(oscs[i]);
-  }
+  updateFilterMode();
+  updateEnvelope();
 }
 
 inline void updateProgram() {
@@ -298,7 +316,7 @@ inline void updatePitch() {
     int8_t note = oscs[i].note;
     if (note < 0) continue;
     note -= 69; 
-    oscs[i].wf->frequency(tuningPitch * pow(2,note/12.+pitchBend));
+    oscs[i].wf->frequency(SYNTH_TUNING * pow(2,note/12.+pitchBend));
   }
 }
 
@@ -316,9 +334,62 @@ inline void updatePan() {
   }
 }
 
+inline void updateMasterVolume() {
+  // read the volume knob
+  float vol = (float) analogRead(A1) / 1280.0;
+  if( fabs(vol-masterVolume) > 0.01) {
+    masterVolume = vol;
+    sgtl5000_1.volume(masterVolume);  
+#ifdef SYNTH_DEBUG
+    Serial1.print("Volume: ");
+    Serial1.println(vol);
+#endif
+  }
+}
+
+//////////////////////////////////////////////////////////////////////
+// Oscillator control functions
+//////////////////////////////////////////////////////////////////////
+inline void oscOn( Oscillator& osc, int8_t note, uint8_t velocity) {
+  // Sets all notes as an offset of A4 (#69)
+  int8_t noteNumberAfterOffset = note - 69; 
+  osc.wf->frequency(SYNTH_TUNING * pow(2,noteNumberAfterOffset/12.+pitchBend));
+  osc.wf->amplitude(velocity/127.*channelVolume);
+#ifdef SYNTH_FULL
+  osc.env->noteOn();
+#endif
+  osc.note = note;
+  osc.velocity = velocity;
+}
+
+inline void oscOff( Oscillator& osc) {
+#ifdef SYNTH_FULL
+  osc.env->noteOff();
+#else
+  osc.wf->amplitude(0);
+#endif
+  osc.note = -1;
+  osc.idx  = 0;
+}
+
+inline void allOff() {
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    oscOff(oscs[i]);
+#ifdef SYNTH_FULL
+  oscs[i].wf->amplitude(0);
+#endif
+  }
+  for (uint8_t i=0; i<10; ++i) {
+    noteBuffer[i] = -1;
+  }
+}
+
+//////////////////////////////////////////////////////////////////////
+// MIDI handlers
+//////////////////////////////////////////////////////////////////////
 void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != midiChannel)
+  if (channel != SYNTH_MIDICHANNEL)
     return;
 #endif
 
@@ -344,17 +415,37 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     default:
       break;
   }
+
+  for (uint8_t i=0; i < 10; ++i) {
+    if( noteBuffer[i] == -1) {
+      noteBuffer[i] = note;
+      break;
+    }
+  }
+  dumpNoteBuffer();
 }
 
 void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != midiChannel)
+  if (channel != SYNTH_MIDICHANNEL)
     return;
 #endif
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.println("NoteOff");
 #endif
+
+  uint8_t i=1;
+  for ( ; i < 10 && noteBuffer[i-1] != note; ++i);
+  for ( ; i < 10; ++i) {
+    noteBuffer[i-1] = noteBuffer[i];
+    if (noteBuffer[i] == -1)
+      break;
+  }
+  if (noteBuffer[9] == note)
+    noteBuffer[9] = -1;
+  dumpNoteBuffer();
+
   if (sustainPressed) return;
 
   Oscillator* curOsc = 0;
@@ -381,63 +472,50 @@ void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
 
 void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != midiChannel)
+  if (channel != SYNTH_MIDICHANNEL)
     return;
 #endif
 
-//#ifdef SYNTH_DEBUG
+#ifdef SYNTH_DEBUG
   Serial1.print("ControlChange: channel ");
   Serial1.print(channel);
   Serial1.print(", control ");
   Serial1.print(control);
   Serial1.print(", value ");
   Serial1.println(value);
-//#endif
+#endif
 
   switch (control) {
-    case(0):
-      // bank select, do nothing (switch sounds via program change only)
+    case 0: // bank select, do nothing (switch sounds via program change only)
       break;
-    case(3):
-      // poly mode
-      switch (value) {
-        case (0):
-          polyMode = MONO;
-          allOff();
-          break;
-        case (127):
-          polyMode = POLY;
-          allOff();
-          break;
-        default:
-          break;
-      }  
-      break;
-    case(7):
-      // volume
+    case 7: // volume
       channelVolume = value/127.;
       updateVolume();
       break;
-    case (10):
-      // pan
+    case 10: // pan
       panorama = value/127.;
       updatePan();
       break;
-    case(64):
-      // sustain pedal
-      if (value == 127) {
+    case 18: // poly mode
+      if (value < POLYMODE_N) {
+        polyMode = PolyMode_t(value);
+      } else {
+        polyMode = PolyMode_t((polyMode+1)%POLYMODE_N);
+      }
+      allOff();
+      break;
+    case 64: // sustain/damper pedal
+      if (value > 64) {
         sustainPressed = true;
       } else {
         sustainPressed = false;
         allOff();
       }
       break;
-    case(121):
-      // reset controllers
+    case 121: // controller reset
       resetAll();
       break;
-    case(123):
-      // all notes off
+    case 123: // all notes off
       allOff();
       break;
     default:
@@ -449,7 +527,7 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
 
 void OnPitchChange(uint8_t channel, int pitch) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != midiChannel)
+  if (channel != SYNTH_MIDICHANNEL)
     return;
 #endif
 
@@ -469,16 +547,17 @@ void OnPitchChange(uint8_t channel, int pitch) {
 
 void OnProgramChange(uint8_t channel, uint8_t program) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != midiChannel)
+  if (channel != SYNTH_MIDICHANNEL)
     return;
 #endif
 
-//#ifdef SYNTH_DEBUG
+#if 0 //#ifdef SYNTH_DEBUG
   Serial1.print("ProgramChange: channel ");
   Serial1.print(channel);
   Serial1.print(", program ");
   Serial1.println(program);
-//#endif
+#endif
+
   if (program <NPROGS) {
     if( program != currentProgram) {
       currentProgram = program;
@@ -489,31 +568,78 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
 
 void OnAfterTouch(uint8_t channel, uint8_t pressure) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != midiChannel)
+  if (channel != SYNTH_MIDICHANNEL)
     return;
 #endif
 
-//#ifdef SYNTH_DEBUG
+#ifdef SYNTH_DEBUG
   Serial1.print("AfterTouch: channel ");
   Serial1.print(channel);
   Serial1.print(", pressure ");
   Serial1.println(pressure);
-//#endif
+#endif
 }
 
-inline void updateMasterVolume() {
-  // read the volume knob
-  float vol = (float) analogRead(A1) / 1280.0;
-  if( fabs(vol-masterVolume) > 0.01) {
-    masterVolume = vol;
-    sgtl5000_1.volume(masterVolume);  
-#ifdef SYNTH_DEBUG
-    Serial1.print("Volume: ");
-    Serial1.println(vol);
-#endif
+void OnSysEx( const uint8_t *data, uint16_t length, bool complete) {
+  Serial1.print("SysEx: length ");
+  Serial1.print(length);
+  Serial1.print(", complete ");
+  Serial1.println(complete);
+}
+
+void OnRealTimeSystem(uint8_t realtimebyte) {
+  Serial1.print("RealTimeSystem: ");
+  Serial1.println(realtimebyte);
+}
+
+void OnTimeCodeQFrame(uint16_t data)
+{
+  Serial1.print("TimeCodeQuarterFrame: ");
+  Serial1.println(data);  
+}
+        
+//////////////////////////////////////////////////////////////////////
+// Debugging functions
+//////////////////////////////////////////////////////////////////////
+inline void dumpNoteBuffer() {
+  Serial1.print("Note Buffer:");
+  for (uint8_t i=0; i < 10; ++i) {
+    Serial1.print(' ');
+    Serial1.print(noteBuffer[i]);
+  }
+  Serial1.println();
+}
+
+inline void printResources( float cpu, uint8_t mem) {
+  Serial1.print( "CPU Usage: ");
+  Serial1.print(cpu);
+  Serial1.print( "%, Memory: ");
+  Serial1.println(mem);
+}
+
+void performanceCheck() {
+  static unsigned long last = 0;
+  static float   lastCpu = 0;
+  static uint8_t lastMem = 0;
+  unsigned long now = millis();
+  if ((now-last) > 1000) {
+    last = now;
+    float   cpu = AudioProcessorUsageMax();
+    uint8_t mem = AudioMemoryUsageMax();
+    if( (lastMem != mem) || fabs(lastCpu-cpu) > 1) {
+      printResources( cpu, mem);
+    }   
+    AudioProcessorUsageMaxReset();
+    AudioMemoryUsageMaxReset();
+    last = now;
+    lastCpu = cpu;
+    lastMem = mem;
   }
 }
 
+//////////////////////////////////////////////////////////////////////
+// setup() and loop()
+//////////////////////////////////////////////////////////////////////
 void setup() {
   Serial1.begin(115200);
   
@@ -539,36 +665,12 @@ void setup() {
   usbMIDI.setHandlePitchChange(OnPitchChange);
   usbMIDI.setHandleProgramChange(OnProgramChange);
   usbMIDI.setHandleAfterTouch(OnAfterTouch);
-
+  usbMIDI.setHandleSysEx(OnSysEx);
+  //usbMIDI.setHandleRealTimeSystem(OnRealTimeSystem);
+  usbMIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
+ 
   Serial1.println();
   Serial1.println("TeensySynth v0.1");
-}
-
-inline void printResources( float cpu, uint8_t mem) {
-  Serial1.print( "CPU Usage: ");
-  Serial1.print(cpu);
-  Serial1.print( "%, Memory: ");
-  Serial1.println(mem);
-}
-
-void performanceCheck() {
-  static unsigned long last = 0;
-  static float   lastCpu = 0;
-  static uint8_t lastMem = 0;
-  unsigned long now = millis();
-  if ((now-last) > 1000) {
-    last = now;
-    float   cpu = AudioProcessorUsageMax();
-    uint8_t mem = AudioMemoryUsageMax();
-    if( (lastMem != mem) || fabs(lastCpu-cpu) > 0.1) {
-      printResources( cpu, mem);
-    }   
-    AudioProcessorUsageMaxReset();
-    AudioMemoryUsageMaxReset();
-    last = now;
-    lastCpu = cpu;
-    lastMem = mem;
-  }
 }
 
 void loop() {
@@ -576,6 +678,20 @@ void loop() {
   updateMasterVolume();
 #ifdef SYNTH_DEBUG
   performanceCheck();
+  while (Serial1.available())
+  {
+    
+    switch (Serial1.read()) {
+      case ('\r'):
+        Serial1.println();
+        break;
+      case ('b'):
+        dumpNoteBuffer();
+        break;
+      default:
+        break;
+    }   
+  }
 #endif
 }
 
