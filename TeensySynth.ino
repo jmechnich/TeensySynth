@@ -4,9 +4,6 @@
 #include <SD.h>
 #include <SerialFlash.h>
 
-// define SYNTH_FULL to enable all features (one filter and envelope per oscillator)
-#define SYNTH_FULL
-
 // define SYNTH_DEBUG to enable debug logging on HWSerial 1 (digital pins 0/1)
 #define SYNTH_DEBUG
 
@@ -21,204 +18,155 @@
 
 // Audio architecture generated with
 // http://www.pjrc.com/teensy/gui/
-#ifdef SYNTH_FULL
+
+#include <Audio.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
+#include <SerialFlash.h>
+
 // GUItool: begin automatically generated code
-AudioSynthWaveform       waveform1;      //xy=79,220
-AudioSynthWaveform       waveform2;      //xy=84,293
-AudioSynthWaveform       waveform3;      //xy=85,354
-AudioSynthWaveform       waveform5;      //xy=85,482
-AudioSynthWaveform       waveform4;      //xy=86,415
-AudioSynthWaveform       waveform8;      //xy=93,667
-AudioSynthWaveform       waveform6;      //xy=95,540
-AudioSynthWaveform       waveform7;      //xy=97,603
-AudioFilterStateVariable filter1;        //xy=263,225
-AudioFilterStateVariable filter5;        //xy=266,479
-AudioFilterStateVariable filter2;        //xy=267,292
-AudioFilterStateVariable filter4;        //xy=267,416
-AudioFilterStateVariable filter3;        //xy=269,353
-AudioFilterStateVariable filter6;        //xy=271,542
-AudioFilterStateVariable filter7;        //xy=271,602
-AudioFilterStateVariable filter8;        //xy=273,664
-AudioMixer4              mixer9;         //xy=452,357
-AudioMixer4              mixer8;         //xy=454,293
-AudioMixer4              mixer12;        //xy=453,548
-AudioMixer4              mixer10;        //xy=454,421
-AudioMixer4              mixer7;         //xy=457,227
-AudioMixer4              mixer11;        //xy=456,485
-AudioMixer4              mixer13;        //xy=456,610
-AudioMixer4              mixer14;        //xy=456,671
-AudioEffectEnvelope      envelope1;      //xy=649,232
-AudioEffectEnvelope      envelope7;      //xy=655,614
-AudioEffectEnvelope      envelope3;      //xy=656,366
-AudioEffectEnvelope      envelope5;      //xy=658,490
-AudioEffectEnvelope      envelope6;      //xy=659,547
-AudioEffectEnvelope      envelope4;      //xy=662,427
-AudioEffectEnvelope      envelope2;      //xy=664,302
-AudioEffectEnvelope      envelope8;      //xy=664,673
-AudioMixer4              mixer2;         //xy=930,386
-AudioMixer4              mixer3;         //xy=933,480
-AudioMixer4              mixer1;         //xy=935,297
-AudioMixer4              mixer4;         //xy=939,566
-AudioMixer4              mixer5;         //xy=1170,357
-AudioMixer4              mixer6;         //xy=1176,485
-AudioOutputI2S           i2s1;           //xy=1338,415
+AudioSynthWaveform       waveform1;      //xy=80,180
+AudioSynthWaveform       waveform2;      //xy=80,240
+AudioSynthWaveform       waveform3;      //xy=80,300
+AudioSynthWaveform       waveform4;      //xy=80,360
+AudioSynthWaveform       waveform5;      //xy=80,420
+AudioSynthWaveform       waveform6;      //xy=80,480
+AudioSynthWaveform       waveform7;      //xy=80,540
+AudioSynthWaveform       waveform8;      //xy=80,600
+AudioFilterStateVariable filter1;        //xy=260,180
+AudioFilterStateVariable filter2;        //xy=260,240
+AudioFilterStateVariable filter3;        //xy=260,300
+AudioFilterStateVariable filter4;        //xy=260,360
+AudioFilterStateVariable filter5;        //xy=260,420
+AudioFilterStateVariable filter6;        //xy=260,480
+AudioFilterStateVariable filter7;        //xy=260,540
+AudioFilterStateVariable filter8;        //xy=260,600
+AudioMixer4              mixer1;         //xy=440,180
+AudioMixer4              mixer2;         //xy=440,240
+AudioMixer4              mixer3;         //xy=440,300
+AudioMixer4              mixer4;         //xy=440,360
+AudioMixer4              mixer5;         //xy=440,420
+AudioMixer4              mixer6;         //xy=440,480
+AudioMixer4              mixer7;         //xy=440,540
+AudioMixer4              mixer8;         //xy=440,600
+AudioEffectEnvelope      envelope1;      //xy=640,180
+AudioEffectEnvelope      envelope2;      //xy=640,240
+AudioEffectEnvelope      envelope3;      //xy=640,300
+AudioEffectEnvelope      envelope4;      //xy=640,360
+AudioEffectEnvelope      envelope5;      //xy=640,420
+AudioEffectEnvelope      envelope6;      //xy=640,480
+AudioEffectEnvelope      envelope7;      //xy=640,540
+AudioEffectEnvelope      envelope8;      //xy=640,600
+AudioMixer4              envmixer1;      //xy=900,210
+AudioMixer4              envmixer2;      //xy=900,330
+AudioMixer4              envmixer3;      //xy=900,450
+AudioMixer4              envmixer4;      //xy=900,570
+AudioMixer4              mixerL;         //xy=1160,270
+AudioMixer4              mixerR;         //xy=1160,510
+AudioOutputI2S           i2s1;           //xy=1300,390
 AudioConnection          patchCord1(waveform1, 0, filter1, 0);
-AudioConnection          patchCord2(waveform1, 0, mixer7, 3);
+AudioConnection          patchCord2(waveform1, 0, mixer1, 3);
 AudioConnection          patchCord3(waveform2, 0, filter2, 0);
-AudioConnection          patchCord4(waveform2, 0, mixer8, 3);
+AudioConnection          patchCord4(waveform2, 0, mixer2, 3);
 AudioConnection          patchCord5(waveform3, 0, filter3, 0);
-AudioConnection          patchCord6(waveform3, 0, mixer9, 3);
-AudioConnection          patchCord7(waveform5, 0, filter5, 0);
-AudioConnection          patchCord8(waveform5, 0, mixer11, 3);
-AudioConnection          patchCord9(waveform4, 0, filter4, 0);
-AudioConnection          patchCord10(waveform4, 0, mixer10, 3);
-AudioConnection          patchCord11(waveform8, 0, filter8, 0);
-AudioConnection          patchCord12(waveform8, 0, mixer14, 3);
-AudioConnection          patchCord13(waveform6, 0, filter6, 0);
-AudioConnection          patchCord14(waveform6, 0, mixer12, 3);
-AudioConnection          patchCord15(waveform7, 0, filter7, 0);
-AudioConnection          patchCord16(waveform7, 0, mixer13, 3);
-AudioConnection          patchCord17(filter1, 0, mixer7, 0);
-AudioConnection          patchCord18(filter1, 1, mixer7, 1);
-AudioConnection          patchCord19(filter1, 2, mixer7, 2);
-AudioConnection          patchCord20(filter5, 0, mixer11, 0);
-AudioConnection          patchCord21(filter5, 1, mixer11, 1);
-AudioConnection          patchCord22(filter5, 2, mixer11, 2);
-AudioConnection          patchCord23(filter2, 0, mixer8, 0);
-AudioConnection          patchCord24(filter2, 1, mixer8, 1);
-AudioConnection          patchCord25(filter2, 2, mixer8, 2);
-AudioConnection          patchCord26(filter4, 0, mixer10, 0);
-AudioConnection          patchCord27(filter4, 1, mixer10, 1);
-AudioConnection          patchCord28(filter4, 2, mixer10, 2);
-AudioConnection          patchCord29(filter3, 0, mixer9, 0);
-AudioConnection          patchCord30(filter3, 1, mixer9, 1);
-AudioConnection          patchCord31(filter3, 2, mixer9, 2);
-AudioConnection          patchCord32(filter6, 0, mixer12, 0);
-AudioConnection          patchCord33(filter6, 1, mixer12, 1);
-AudioConnection          patchCord34(filter6, 2, mixer12, 2);
-AudioConnection          patchCord35(filter7, 0, mixer13, 0);
-AudioConnection          patchCord36(filter7, 1, mixer13, 1);
-AudioConnection          patchCord37(filter7, 2, mixer13, 2);
-AudioConnection          patchCord38(filter8, 0, mixer14, 0);
-AudioConnection          patchCord39(filter8, 1, mixer14, 1);
-AudioConnection          patchCord40(filter8, 2, mixer14, 2);
-AudioConnection          patchCord41(mixer9, envelope3);
-AudioConnection          patchCord42(mixer8, envelope2);
-AudioConnection          patchCord43(mixer12, envelope6);
-AudioConnection          patchCord44(mixer10, envelope4);
-AudioConnection          patchCord45(mixer7, envelope1);
-AudioConnection          patchCord46(mixer11, envelope5);
-AudioConnection          patchCord47(mixer13, envelope7);
-AudioConnection          patchCord48(mixer14, envelope8);
-AudioConnection          patchCord49(envelope1, 0, mixer1, 0);
-AudioConnection          patchCord50(envelope1, 0, mixer2, 0);
-AudioConnection          patchCord51(envelope7, 0, mixer3, 2);
-AudioConnection          patchCord52(envelope7, 0, mixer4, 2);
-AudioConnection          patchCord53(envelope3, 0, mixer1, 2);
-AudioConnection          patchCord54(envelope3, 0, mixer2, 2);
-AudioConnection          patchCord55(envelope5, 0, mixer3, 0);
-AudioConnection          patchCord56(envelope5, 0, mixer4, 0);
-AudioConnection          patchCord57(envelope6, 0, mixer3, 1);
-AudioConnection          patchCord58(envelope6, 0, mixer4, 1);
-AudioConnection          patchCord59(envelope4, 0, mixer1, 3);
-AudioConnection          patchCord60(envelope4, 0, mixer2, 3);
-AudioConnection          patchCord61(envelope2, 0, mixer1, 1);
-AudioConnection          patchCord62(envelope2, 0, mixer2, 1);
-AudioConnection          patchCord63(envelope8, 0, mixer3, 3);
-AudioConnection          patchCord64(envelope8, 0, mixer4, 3);
-AudioConnection          patchCord65(mixer2, 0, mixer6, 0);
-AudioConnection          patchCord66(mixer3, 0, mixer5, 1);
-AudioConnection          patchCord67(mixer1, 0, mixer5, 0);
-AudioConnection          patchCord68(mixer4, 0, mixer6, 1);
-AudioConnection          patchCord69(mixer5, 0, i2s1, 0);
-AudioConnection          patchCord70(mixer6, 0, i2s1, 1);
-AudioControlSGTL5000     sgtl5000_1;     //xy=192,114
+AudioConnection          patchCord6(waveform3, 0, mixer3, 3);
+AudioConnection          patchCord7(waveform4, 0, filter4, 0);
+AudioConnection          patchCord8(waveform4, 0, mixer4, 3);
+AudioConnection          patchCord9(waveform5, 0, filter5, 0);
+AudioConnection          patchCord10(waveform5, 0, mixer5, 3);
+AudioConnection          patchCord11(waveform6, 0, filter6, 0);
+AudioConnection          patchCord12(waveform6, 0, mixer6, 3);
+AudioConnection          patchCord13(waveform7, 0, filter7, 0);
+AudioConnection          patchCord14(waveform7, 0, mixer7, 3);
+AudioConnection          patchCord15(waveform8, 0, filter8, 0);
+AudioConnection          patchCord16(waveform8, 0, mixer8, 3);
+AudioConnection          patchCord17(filter1, 0, mixer1, 0);
+AudioConnection          patchCord18(filter1, 1, mixer1, 1);
+AudioConnection          patchCord19(filter1, 2, mixer1, 2);
+AudioConnection          patchCord20(filter2, 0, mixer2, 0);
+AudioConnection          patchCord21(filter2, 1, mixer2, 1);
+AudioConnection          patchCord22(filter2, 2, mixer2, 2);
+AudioConnection          patchCord23(filter3, 0, mixer3, 0);
+AudioConnection          patchCord24(filter3, 1, mixer3, 1);
+AudioConnection          patchCord25(filter3, 2, mixer3, 2);
+AudioConnection          patchCord26(filter4, 0, mixer4, 0);
+AudioConnection          patchCord27(filter4, 1, mixer4, 1);
+AudioConnection          patchCord28(filter4, 2, mixer4, 2);
+AudioConnection          patchCord29(filter5, 0, mixer5, 0);
+AudioConnection          patchCord30(filter5, 1, mixer5, 1);
+AudioConnection          patchCord31(filter5, 2, mixer5, 2);
+AudioConnection          patchCord32(filter6, 0, mixer6, 0);
+AudioConnection          patchCord33(filter6, 1, mixer6, 1);
+AudioConnection          patchCord34(filter6, 2, mixer6, 2);
+AudioConnection          patchCord35(filter7, 0, mixer7, 0);
+AudioConnection          patchCord36(filter7, 1, mixer7, 1);
+AudioConnection          patchCord37(filter7, 2, mixer7, 2);
+AudioConnection          patchCord38(filter8, 0, mixer8, 0);
+AudioConnection          patchCord39(filter8, 1, mixer8, 1);
+AudioConnection          patchCord40(filter8, 2, mixer8, 2);
+AudioConnection          patchCord41(mixer1, 0, envelope1, 0);
+AudioConnection          patchCord42(mixer1, 0, envmixer1, 2);
+AudioConnection          patchCord43(mixer2, 0, envelope2, 0);
+AudioConnection          patchCord44(mixer2, 0, envmixer1, 3);
+AudioConnection          patchCord45(mixer3, 0, envelope3, 0);
+AudioConnection          patchCord46(mixer3, 0, envmixer2, 2);
+AudioConnection          patchCord47(mixer4, 0, envelope4, 0);
+AudioConnection          patchCord48(mixer4, 0, envmixer2, 3);
+AudioConnection          patchCord49(mixer5, 0, envelope5, 0);
+AudioConnection          patchCord50(mixer5, 0, envmixer3, 2);
+AudioConnection          patchCord51(mixer6, 0, envelope6, 0);
+AudioConnection          patchCord52(mixer6, 0, envmixer3, 3);
+AudioConnection          patchCord53(mixer7, 0, envelope7, 0);
+AudioConnection          patchCord54(mixer7, 0, envmixer4, 2);
+AudioConnection          patchCord55(mixer8, 0, envelope8, 0);
+AudioConnection          patchCord56(mixer8, 0, envmixer4, 3);
+AudioConnection          patchCord57(envelope1, 0, envmixer1, 0);
+AudioConnection          patchCord58(envelope2, 0, envmixer1, 1);
+AudioConnection          patchCord59(envelope3, 0, envmixer2, 0);
+AudioConnection          patchCord60(envelope4, 0, envmixer2, 1);
+AudioConnection          patchCord61(envelope5, 0, envmixer3, 0);
+AudioConnection          patchCord62(envelope6, 0, envmixer3, 1);
+AudioConnection          patchCord63(envelope7, 0, envmixer4, 0);
+AudioConnection          patchCord64(envelope8, 0, envmixer4, 1);
+AudioConnection          patchCord65(envmixer1, 0, mixerL, 0);
+AudioConnection          patchCord66(envmixer1, 0, mixerR, 0);
+AudioConnection          patchCord67(envmixer2, 0, mixerL, 1);
+AudioConnection          patchCord68(envmixer2, 0, mixerR, 1);
+AudioConnection          patchCord69(envmixer3, 0, mixerL, 2);
+AudioConnection          patchCord70(envmixer3, 0, mixerR, 2);
+AudioConnection          patchCord71(envmixer4, 0, mixerL, 3);
+AudioConnection          patchCord72(envmixer4, 0, mixerR, 3);
+AudioConnection          patchCord73(mixerL, 0, i2s1, 0);
+AudioConnection          patchCord74(mixerR, 0, i2s1, 1);
+AudioControlSGTL5000     sgtl5000_1;     //xy=80,60
 // GUItool: end automatically generated code
-#else
-// GUItool: begin automatically generated code
-AudioSynthWaveform       waveform1;      //xy=395,244
-AudioSynthWaveform       waveform2;      //xy=400,317
-AudioSynthWaveform       waveform3;      //xy=401,378
-AudioSynthWaveform       waveform5;      //xy=401,506
-AudioSynthWaveform       waveform4;      //xy=402,439
-AudioSynthWaveform       waveform8;      //xy=409,691
-AudioSynthWaveform       waveform6;      //xy=411,564
-AudioSynthWaveform       waveform7;      //xy=413,627
-AudioMixer4              mixer2;         //xy=930,386
-AudioMixer4              mixer3;         //xy=933,480
-AudioMixer4              mixer1;         //xy=935,297
-AudioMixer4              mixer4;         //xy=939,566
-AudioMixer4              mixer5;         //xy=1170,357
-AudioMixer4              mixer6;         //xy=1176,485
-AudioOutputI2S           i2s1;           //xy=1338,415
-AudioConnection          patchCord1(waveform1, 0, mixer1, 0);
-AudioConnection          patchCord2(waveform1, 0, mixer2, 0);
-AudioConnection          patchCord3(waveform2, 0, mixer1, 1);
-AudioConnection          patchCord4(waveform2, 0, mixer2, 1);
-AudioConnection          patchCord5(waveform3, 0, mixer1, 2);
-AudioConnection          patchCord6(waveform3, 0, mixer2, 2);
-AudioConnection          patchCord7(waveform5, 0, mixer3, 0);
-AudioConnection          patchCord8(waveform5, 0, mixer4, 0);
-AudioConnection          patchCord9(waveform4, 0, mixer1, 3);
-AudioConnection          patchCord10(waveform4, 0, mixer2, 3);
-AudioConnection          patchCord11(waveform8, 0, mixer3, 3);
-AudioConnection          patchCord12(waveform8, 0, mixer4, 3);
-AudioConnection          patchCord13(waveform6, 0, mixer3, 1);
-AudioConnection          patchCord14(waveform6, 0, mixer4, 1);
-AudioConnection          patchCord15(waveform7, 0, mixer3, 2);
-AudioConnection          patchCord16(waveform7, 0, mixer4, 2);
-AudioConnection          patchCord17(mixer2, 0, mixer6, 0);
-AudioConnection          patchCord18(mixer3, 0, mixer5, 1);
-AudioConnection          patchCord19(mixer1, 0, mixer5, 0);
-AudioConnection          patchCord20(mixer4, 0, mixer6, 1);
-AudioConnection          patchCord21(mixer5, 0, i2s1, 0);
-AudioConnection          patchCord22(mixer6, 0, i2s1, 1);
-AudioControlSGTL5000     sgtl5000_1;     //xy=192,114
-// GUItool: end automatically generated code
-#endif
 
 //////////////////////////////////////////////////////////////////////
 // Data types and lookup tables
 //////////////////////////////////////////////////////////////////////
 struct Oscillator {
   AudioSynthWaveform*       wf;
-#ifdef SYNTH_FULL
   AudioFilterStateVariable* filt;
   AudioMixer4*              mix;
   AudioEffectEnvelope*      env;
-#endif
   int note;
-  int idx;
   uint8_t velocity;
 };
 
 #define NVOICES 8
 
-#ifdef SYNTH_FULL
 #define AMEMORY 40
 Oscillator oscs[NVOICES] = {
-  { &waveform1, &filter1, &mixer7,  &envelope1, -1, 0, 0 },
-  { &waveform2, &filter2, &mixer8,  &envelope2, -1, 0, 0 },
-  { &waveform3, &filter3, &mixer9,  &envelope3, -1, 0, 0 },
-  { &waveform4, &filter4, &mixer10, &envelope4, -1, 0, 0 },
-  { &waveform5, &filter5, &mixer11, &envelope5, -1, 0, 0 },
-  { &waveform6, &filter6, &mixer12, &envelope6, -1, 0, 0 },
-  { &waveform7, &filter7, &mixer13, &envelope7, -1, 0, 0 },
-  { &waveform8, &filter8, &mixer14, &envelope8, -1, 0, 0 },
+  { &waveform1, &filter1, &mixer1, &envelope1, -1, 0 },
+  { &waveform2, &filter2, &mixer2, &envelope2, -1, 0 },
+  { &waveform3, &filter3, &mixer3, &envelope3, -1, 0 },
+  { &waveform4, &filter4, &mixer4, &envelope4, -1, 0 },
+  { &waveform5, &filter5, &mixer5, &envelope5, -1, 0 },
+  { &waveform6, &filter6, &mixer6, &envelope6, -1, 0 },
+  { &waveform7, &filter7, &mixer7, &envelope7, -1, 0 },
+  { &waveform8, &filter8, &mixer7, &envelope8, -1, 0 },
 };
-#else
-#define AMEMORY 12
-Oscillator oscs[NVOICES] = {
-  { &waveform1, -1, 0, 0 },
-  { &waveform2, -1, 0, 0 },
-  { &waveform3, -1, 0, 0 },
-  { &waveform4, -1, 0, 0 },
-  { &waveform5, -1, 0, 0 },
-  { &waveform6, -1, 0, 0 },
-  { &waveform7, -1, 0, 0 },
-  { &waveform8, -1, 0, 0 },
-};
-#endif
 
 enum PolyMode_t {
   POLY,
@@ -253,43 +201,116 @@ uint8_t progs[NPROGS] = {
 float   masterVolume   = 0.3;
 uint8_t currentProgram = 3;
 
-PolyMode_t   polyMode;
-FilterMode_t filterMode;
+PolyMode_t polyMode;
 bool       sustainPressed;
 float      channelVolume;
 float      panorama;
 float      pulseWidth;
 float      pitchBend;
 
-int8_t noteBuffer[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+// filter
+FilterMode_t filterMode;
+float filtFreq; // 20-AUDIO_SAMPLE_RATE_EXACT/2.5
+float filtReso; // 0.9-5.0
+float filtOcta; // 0-7
+
+// envelope
+bool  envOn;
+float envDelay;   // 0-200
+float envAttack;  // 0-200
+float envHold;    // 0-200
+float envDecay;   // 0-200
+float envSustain; // 0-1
+float envRelease; // 0-200
+
+int8_t notesOn[NVOICES]      = { -1, -1, -1, -1, -1, -1, -1, -1, };
+int8_t notesPressed[NVOICES] = { -1, -1, -1, -1, -1, -1, -1, -1, };
+
+inline void notesReset(int8_t* notes) {
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    notes[i] = -1;
+  }
+}
+
+inline void notesAdd(int8_t* notes, uint8_t note) {
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    if(notes[i]==-1) {
+      notes[i] = note;
+      break;
+    }
+  }
+}
+
+inline void notesDel(int8_t* notes, uint8_t note) {
+  uint8_t i=1;
+  for ( ; i < NVOICES && notes[i-1] != note; ++i);
+  for ( ; i < NVOICES; ++i) {
+    notes[i-1] = notes[i];
+    if (notes[i]==-1)
+      break;
+  }
+  if (notes[NVOICES-1]==note || i == NVOICES)
+    notes[NVOICES-1] = -1;
+}
+
+inline bool notesFind(int8_t* notes, uint8_t note) {
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    if (notes[i]==note) return true;
+  }
+  return false;
+}
 
 //////////////////////////////////////////////////////////////////////
 // Parameter control functions
 //////////////////////////////////////////////////////////////////////
 inline void updateFilterMode() {
-#ifdef SYNTH_FULL
-  for (uint8_t i=0; i < NVOICES; ++i) {
-    for (uint8_t fm=0; fm < FILTERMODE_N; ++fm) {
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    for (uint8_t fm=0; fm<FILTERMODE_N; ++fm) {
       if (fm == filterMode)
         oscs[i].mix->gain(fm,1);
       else
         oscs[i].mix->gain(fm,0);
     }
   }
-#endif
+}
+
+inline void updateFilter() {
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    oscs[i].filt->frequency(filtFreq);
+    oscs[i].filt->resonance(filtReso);
+    oscs[i].filt->octaveControl(filtOcta);
+  }
 }
 
 inline void updateEnvelope() {
-#ifdef SYNTH_FULL
-  for (uint8_t i=0; i < NVOICES; ++i) {
-    oscs[i].env->attack(50);
-    oscs[i].env->hold(50);
-    oscs[i].env->decay(50);
-    oscs[i].env->sustain(0.75);
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    oscs[i].env->delay(envDelay);
+    oscs[i].env->attack(envAttack);
+    oscs[i].env->hold(envHold);
+    oscs[i].env->decay(envDecay);
+    oscs[i].env->sustain(envSustain);
+    oscs[i].env->release(envRelease);
   }
-#endif
 }
-inline void resetAll() {
+
+inline void toggleEnvelope() {
+  float env   = envOn ? 0.5 : 0;
+  float noenv = envOn ? 0 : 0.5;
+  for (uint8_t i=0; i<2; ++i) {
+    // env
+    envmixer1.gain(i,env);
+    envmixer2.gain(i,env);
+    envmixer3.gain(i,env);
+    envmixer4.gain(i,env);
+    // no env
+    envmixer1.gain(i+2,noenv);
+    envmixer2.gain(i+2,noenv);
+    envmixer3.gain(i+2,noenv);
+    envmixer4.gain(i+2,noenv);
+  }
+}
+
+void resetAll() {
   polyMode       = POLY;
   filterMode     = FILTEROFF;
   sustainPressed = false;
@@ -298,8 +319,23 @@ inline void resetAll() {
   pulseWidth     = 0.5;
   pitchBend      = 0;
 
+  // filter
+  filtFreq = 10000.;
+  filtReso = 0.7;
+  filtOcta = 0;
+
+  // envelope
+  envOn      = true;
+  envDelay   = 0;
+  envAttack  = 50;
+  envHold    = 50;
+  envDecay   = 50;
+  envSustain = 0.75;
+  envRelease = 50;
+  
   updateFilterMode();
   updateEnvelope();
+  updatePan();
 }
 
 inline void updateProgram() {
@@ -308,6 +344,14 @@ inline void updateProgram() {
       oscs[i].wf->pulseWidth(pulseWidth);
     }
     oscs[i].wf->begin(progs[currentProgram]);
+  }
+}
+
+inline void updatePulseWidth() {
+  if (currentProgram!=5) return;
+  for (uint8_t i=0; i<NVOICES; ++i) {
+    if (oscs[i].note < 0) continue;
+    oscs[i].wf->pulseWidth(pulseWidth);
   }
 }
 
@@ -328,9 +372,9 @@ inline void updateVolume() {
 }
 
 inline void updatePan() {
-  for (uint8_t i=0; i<2; ++i) {
-    mixer5.gain(i,1-panorama);
-    mixer6.gain(i,panorama);
+  for (uint8_t i=0; i<4; ++i) {
+    mixerL.gain(i,(1-panorama)/4.);
+    mixerR.gain(i,panorama/4.);
   }
 }
 
@@ -339,7 +383,7 @@ inline void updateMasterVolume() {
   float vol = (float) analogRead(A1) / 1280.0;
   if( fabs(vol-masterVolume) > 0.01) {
     masterVolume = vol;
-    sgtl5000_1.volume(masterVolume);  
+    sgtl5000_1.volume(masterVolume);
 #ifdef SYNTH_DEBUG
     Serial1.print("Volume: ");
     Serial1.println(vol);
@@ -351,37 +395,39 @@ inline void updateMasterVolume() {
 // Oscillator control functions
 //////////////////////////////////////////////////////////////////////
 inline void oscOn( Oscillator& osc, int8_t note, uint8_t velocity) {
-  // Sets all notes as an offset of A4 (#69)
-  int8_t noteNumberAfterOffset = note - 69; 
-  osc.wf->frequency(SYNTH_TUNING * pow(2,noteNumberAfterOffset/12.+pitchBend));
-  osc.wf->amplitude(velocity/127.*channelVolume);
-#ifdef SYNTH_FULL
-  osc.env->noteOn();
-#endif
-  osc.note = note;
-  osc.velocity = velocity;
+  if (osc.note!=note) {
+    // Sets all notes as an offset of A4 (#69)
+    int8_t noteNumberAfterOffset = note - 69; 
+    osc.wf->frequency(SYNTH_TUNING * pow(2,noteNumberAfterOffset/12.+pitchBend));
+    notesAdd(notesOn,note);
+    osc.wf->amplitude(velocity/127.*channelVolume);
+    osc.velocity = velocity;
+    osc.note = note;
+    if (envOn)
+      osc.env->noteOn();
+  } else {
+    if (velocity > osc.velocity) {
+      osc.wf->amplitude(velocity/127.*channelVolume);
+      osc.velocity = velocity;
+    }
+  }
 }
 
 inline void oscOff( Oscillator& osc) {
-#ifdef SYNTH_FULL
-  osc.env->noteOff();
-#else
-  osc.wf->amplitude(0);
-#endif
+  if (envOn)
+    osc.env->noteOff();
+  else
+    osc.wf->amplitude(0);
+  notesDel(notesOn,osc.note);
   osc.note = -1;
-  osc.idx  = 0;
 }
 
 inline void allOff() {
   for (uint8_t i=0; i<NVOICES; ++i) {
     oscOff(oscs[i]);
-#ifdef SYNTH_FULL
-  oscs[i].wf->amplitude(0);
-#endif
+    oscs[i].wf->amplitude(0);
   }
-  for (uint8_t i=0; i<10; ++i) {
-    noteBuffer[i] = -1;
-  }
+  notesReset(notesOn);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -389,21 +435,36 @@ inline void allOff() {
 //////////////////////////////////////////////////////////////////////
 void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL)
-    return;
+  if (channel != SYNTH_MIDICHANNEL) return;
 #endif
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.println("NoteOn");
 #endif
 
+  notesAdd(notesPressed,note);
+
   Oscillator* curOsc = 0;
+  if (sustainPressed && notesFind(notesOn,note)) {
+    for (uint8_t i=0; i<NVOICES; ++i) {
+      if (oscs[i].note == note) {
+        curOsc = &oscs[i];
+        break;
+      }
+    }
+  }
+  
   switch(polyMode) {
     case(POLY):
-      for (uint8_t i=0; i<NVOICES; ++i) {
-        if (!curOsc && oscs[i].note < 0) {
+      for (uint8_t i=0; i<NVOICES && !curOsc; ++i) {
+        if (oscs[i].note < 0) {
           curOsc = &oscs[i];
+          break;
         }
+      }
+      if (!curOsc && notesOn[0] != -1) {
+        Serial1.println("Stealing voice");
+        curOsc = OnNoteOffReal(channel,notesOn[0],velocity,true);
       }
       if (!curOsc) return;
       oscOn( *curOsc, note, velocity);
@@ -416,37 +477,20 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
       break;
   }
 
-  for (uint8_t i=0; i < 10; ++i) {
-    if( noteBuffer[i] == -1) {
-      noteBuffer[i] = note;
-      break;
-    }
-  }
-  dumpNoteBuffer();
+  return;
 }
 
-void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
+Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool ignoreSustain) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL)
-    return;
+  if (channel != SYNTH_MIDICHANNEL) return 0;
 #endif
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.println("NoteOff");
 #endif
+  notesDel(notesPressed,note);
 
-  uint8_t i=1;
-  for ( ; i < 10 && noteBuffer[i-1] != note; ++i);
-  for ( ; i < 10; ++i) {
-    noteBuffer[i-1] = noteBuffer[i];
-    if (noteBuffer[i] == -1)
-      break;
-  }
-  if (noteBuffer[9] == note)
-    noteBuffer[9] = -1;
-  dumpNoteBuffer();
-
-  if (sustainPressed) return;
+  if (sustainPressed && !ignoreSustain) return 0;
 
   Oscillator* curOsc = 0;
   switch(polyMode) {
@@ -457,7 +501,7 @@ void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
           break;
         }
       }
-      if (!curOsc) return;
+      if (!curOsc) return 0;
       oscOff(*curOsc);
       break;
     case (MONO):
@@ -468,12 +512,17 @@ void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
     default:
       break;
   }
+  
+  return curOsc;
+}
+
+inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
+  OnNoteOffReal(channel,note,velocity,false);
 }
 
 void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL)
-    return;
+  if (channel != SYNTH_MIDICHANNEL) return;
 #endif
 
 #ifdef SYNTH_DEBUG
@@ -496,6 +545,40 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
       panorama = value/127.;
       updatePan();
       break;
+    case 12: // attack
+      envAttack = value*200./127.;
+      updateEnvelope();
+      break;
+    case 13: // release
+      envRelease = value*200./127.;
+      updateEnvelope();
+      break;
+    case 14: // filter frequency
+      filtFreq = value/2.5*AUDIO_SAMPLE_RATE_EXACT/127.;
+      updateFilter();
+      Serial1.print("Frequency: ");
+      Serial1.println(filtFreq);
+      break;
+    case 15: // filter resonance
+      filtReso = value*4.1/127.+0.9;
+      updateFilter();
+      Serial1.print("Resonance: ");
+      Serial1.println(filtReso);
+      break;
+    case 16: // filter octave control
+      filtOcta = value*7./127.;
+      updateFilter();
+      Serial1.print("Octave Control: ");
+      Serial1.println(filtOcta);
+     break;
+    case 17: // filter mode
+      if (value < FILTERMODE_N) {
+        filterMode = FilterMode_t(value);
+      } else {
+        filterMode = FilterMode_t((filterMode+1)%FILTERMODE_N);
+      }
+      updateFilterMode();
+      break;
     case 18: // poly mode
       if (value < POLYMODE_N) {
         polyMode = PolyMode_t(value);
@@ -504,12 +587,41 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
       }
       allOff();
       break;
+    case 19: // envelope mode
+      allOff();
+      envOn = !envOn;
+      toggleEnvelope();
+      break;
+    case 20: // delay
+      envDelay = value*200./127.;
+      updateEnvelope();
+      break;
+    case 21: // hold
+      envHold = value*200./127.;
+      updateEnvelope();
+      break;
+    case 22: // decay
+      envDecay = value*200./127.;
+      updateEnvelope();
+      break;
+    case 23: // sustain
+      envSustain = value/127.;
+      updateEnvelope();
+      break;
+    case 24: // pulse width
+      pulseWidth = value/127.;
+      updatePulseWidth();
+      break;
     case 64: // sustain/damper pedal
       if (value > 64) {
         sustainPressed = true;
       } else {
         sustainPressed = false;
-        allOff();
+        for (uint8_t i=0; i<NVOICES; ++i) {
+          if (oscs[i].note != -1 && !notesFind(notesPressed,oscs[i].note)) {
+            oscOff(oscs[i]);
+          }
+        }
       }
       break;
     case 121: // controller reset
@@ -527,8 +639,7 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
 
 void OnPitchChange(uint8_t channel, int pitch) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL)
-    return;
+  if (channel != SYNTH_MIDICHANNEL) return;
 #endif
 
 #if 0 //#ifdef SYNTH_DEBUG
@@ -547,8 +658,7 @@ void OnPitchChange(uint8_t channel, int pitch) {
 
 void OnProgramChange(uint8_t channel, uint8_t program) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL)
-    return;
+  if (channel!=SYNTH_MIDICHANNEL) return;
 #endif
 
 #if 0 //#ifdef SYNTH_DEBUG
@@ -559,7 +669,7 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
 #endif
 
   if (program <NPROGS) {
-    if( program != currentProgram) {
+    if( program!=currentProgram) {
       currentProgram = program;
       updateProgram();
     }
@@ -568,8 +678,7 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
 
 void OnAfterTouch(uint8_t channel, uint8_t pressure) {
 #ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL)
-    return;
+  if (channel!=SYNTH_MIDICHANNEL) return;
 #endif
 
 #ifdef SYNTH_DEBUG
@@ -601,11 +710,10 @@ void OnTimeCodeQFrame(uint16_t data)
 //////////////////////////////////////////////////////////////////////
 // Debugging functions
 //////////////////////////////////////////////////////////////////////
-inline void dumpNoteBuffer() {
-  Serial1.print("Note Buffer:");
-  for (uint8_t i=0; i < 10; ++i) {
+inline void notesDump(int8_t* notes) {
+  for (uint8_t i=0; i<NVOICES; ++i) {
     Serial1.print(' ');
-    Serial1.print(noteBuffer[i]);
+    Serial1.print(notes[i]);
   }
   Serial1.println();
 }
@@ -622,11 +730,11 @@ void performanceCheck() {
   static float   lastCpu = 0;
   static uint8_t lastMem = 0;
   unsigned long now = millis();
-  if ((now-last) > 1000) {
+  if ((now-last)>1000) {
     last = now;
     float   cpu = AudioProcessorUsageMax();
     uint8_t mem = AudioMemoryUsageMax();
-    if( (lastMem != mem) || fabs(lastCpu-cpu) > 1) {
+    if( (lastMem!=mem) || fabs(lastCpu-cpu)>1) {
       printResources( cpu, mem);
     }   
     AudioProcessorUsageMaxReset();
@@ -648,15 +756,8 @@ void setup() {
   sgtl5000_1.volume(masterVolume);
 
   resetAll();
+  toggleEnvelope();
   updateProgram();
-  
-  for (uint8_t i=0; i<4; ++i) {
-    mixer1.gain(i,0.25);
-    mixer2.gain(i,0.25);
-    mixer3.gain(i,0.25);
-    mixer4.gain(i,0.25);
-  }
-  updatePan();
   delay(1000);
   
   usbMIDI.setHandleNoteOff(OnNoteOff);
@@ -686,7 +787,10 @@ void loop() {
         Serial1.println();
         break;
       case ('b'):
-        dumpNoteBuffer();
+        Serial1.print("Notes Pressed:");
+        notesDump(notesPressed);
+        Serial1.print("Notes On:     ");
+        notesDump(notesOn);
         break;
       default:
         break;
