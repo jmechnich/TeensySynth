@@ -1,0 +1,52 @@
+--------------------------------------------------------------------------------
+CC# | Name                   | Function
+--------------------------------------------------------------------------------
+  0 | Bank select            | ignored, only uses program change
+  7 | Volume                 | changes amplitude for all oscillators
+ 10 | Panorama               | changes L/R balance
+--------------------------------------------------------------------------------
+ 12 | Envelope attack        | changes envelope attack time  (range: 0-200 ms)
+ 13 | Envelope release       | changes envelope release time (range: 0-200 ms)
+--------------------------------------------------------------------------------
+ 14 | Filter frequency       | changes filter freqeuncy      (range: ~20-17k Hz)
+ 15 | Filter resonance       | changes filter resonance Q    (range: 0.9-5.0)
+ 16 | Filter octave ctrl     | changes filter octave control (range: 0.0-7.0)
+ 17 | Filter mode            | MIDI value
+    |                        |   0      low-pass
+    |                        |   1      band-pass
+    |                        |   2      high-pass
+    |                        |   3      filter off
+    |                        |   4-127  cycles filter mode
+--------------------------------------------------------------------------------
+ 18 | Polyphony mode         | MIDI value
+    |                        |   0      poly
+    |                        |   1      mono
+    |                        |   2-127  cycles polyphony mode
+--------------------------------------------------------------------------------
+ 19 | Envelope mode          | MIDI value
+    |                        |   0      envelope off
+    |                        |   1      envelope on
+    |                        |   2-127  toggle envelope mode on/off
+ 20 | Envelope delay         | changes envelope delay time    (range: 0-200 ms)
+ 21 | Envelope hold          | changes envelope hold time     (range: 0-200 ms)
+ 22 | Envelope decay         | changes envelope decay time    (range: 0-200 ms)
+ 23 | Envelope sustain       | changes envelope sustain level (range: 0.0-1.0)
+--------------------------------------------------------------------------------
+ 24 | Pulse width            | changes pulse width of osc. (range: 0.0-1.0)
+--------------------------------------------------------------------------------
+ 25 | Flanger mode           | MIDI value
+    |                        |   0     flanger off
+    |                        |   1     flanger on
+    |                        |   2-127 toggle flanger on/off
+ 26 | Flanger offset         | changes flanger offset (range: ?)
+ 27 | Flanger depth          | changes flanger depth (range: ?)
+ 28 | Flanger coarse freq.   | changes flanger frequency (range: 0.0-10.0)
+ 29 | Flanger fine freq.     | changes flanger frequency (range: 0.0-1.0)
+--------------------------------------------------------------------------------
+ 64 | Damper pedal/sustain   | MIDI value
+    |                        |   0- 63  sustain off
+    |                        |  64-127  sustain on
+--------------------------------------------------------------------------------
+121 | Reset all controllers  | Reset controller values to default
+123 | All notes off          | Switches all oscillators off
+--------------------------------------------------------------------------------
