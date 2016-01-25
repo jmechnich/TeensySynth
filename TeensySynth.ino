@@ -64,7 +64,9 @@ AudioMixer4              envmixer3;      //xy=900,450
 AudioMixer4              envmixer4;      //xy=900,570
 AudioMixer4              mixerL;         //xy=1160,270
 AudioMixer4              mixerR;         //xy=1160,510
-AudioOutputI2S           i2s1;           //xy=1300,390
+AudioEffectFlange        flangerL;       //xy=1300,270
+AudioEffectFlange        flangerR;       //xy=1300,510
+AudioOutputI2S           i2s1;           //xy=1450,390
 AudioConnection          patchCord1(waveform1, 0, filter1, 0);
 AudioConnection          patchCord2(waveform1, 0, mixer1, 3);
 AudioConnection          patchCord3(waveform2, 0, filter2, 0);
@@ -137,10 +139,19 @@ AudioConnection          patchCord69(envmixer3, 0, mixerL, 2);
 AudioConnection          patchCord70(envmixer3, 0, mixerR, 2);
 AudioConnection          patchCord71(envmixer4, 0, mixerL, 3);
 AudioConnection          patchCord72(envmixer4, 0, mixerR, 3);
-AudioConnection          patchCord73(mixerL, 0, i2s1, 0);
-AudioConnection          patchCord74(mixerR, 0, i2s1, 1);
+AudioConnection          patchCord73(mixerL, 0, flangerL, 0);
+AudioConnection          patchCord74(mixerR, 0, flangerR, 0);
+AudioConnection          patchCord75(flangerL, 0, i2s1, 0);
+AudioConnection          patchCord76(flangerR, 0, i2s1, 1);
 AudioControlSGTL5000     sgtl5000_1;     //xy=80,60
 // GUItool: end automatically generated code
+
+// define delay lines for modulation effects
+#define DELAY_LENGTH (16*AUDIO_BLOCK_SAMPLES)
+short delaylineL[DELAY_LENGTH];
+short delaylineR[DELAY_LENGTH];
+
+#define AMEMORY 50
 
 //////////////////////////////////////////////////////////////////////
 // Data types and lookup tables
@@ -150,14 +161,14 @@ struct Oscillator {
   AudioFilterStateVariable* filt;
   AudioMixer4*              mix;
   AudioEffectEnvelope*      env;
-  int note;
+  int8_t  note;
   uint8_t velocity;
+
+  unsigned long offTime;
 };
 
 #define NVOICES 8
-
-#define AMEMORY 40
-Oscillator oscs[NVOICES] = {
+Oscillator oscs[NVOICES+1] = {
   { &waveform1, &filter1, &mixer1, &envelope1, -1, 0 },
   { &waveform2, &filter2, &mixer2, &envelope2, -1, 0 },
   { &waveform3, &filter3, &mixer3, &envelope3, -1, 0 },
@@ -166,6 +177,7 @@ Oscillator oscs[NVOICES] = {
   { &waveform6, &filter6, &mixer6, &envelope6, -1, 0 },
   { &waveform7, &filter7, &mixer7, &envelope7, -1, 0 },
   { &waveform8, &filter8, &mixer7, &envelope8, -1, 0 },
+  0,
 };
 
 enum PolyMode_t {
@@ -223,8 +235,18 @@ float envDecay;   // 0-200
 float envSustain; // 0-1
 float envRelease; // 0-200
 
+// FX
+bool  flangerOn;
+int   flangerOffset;
+int   flangerDepth;
+float flangerFreqCoarse;
+float flangerFreqFine;
+
 int8_t notesOn[NVOICES]      = { -1, -1, -1, -1, -1, -1, -1, -1, };
 int8_t notesPressed[NVOICES] = { -1, -1, -1, -1, -1, -1, -1, -1, };
+
+float   statsCpu = 0;
+uint8_t statsMem = 0;
 
 inline void notesReset(int8_t* notes) {
   for (uint8_t i=0; i<NVOICES; ++i) {
@@ -310,6 +332,24 @@ inline void toggleEnvelope() {
   }
 }
 
+void updateFlanger() {
+  if (flangerOn) {
+    AudioNoInterrupts();
+    flangerL.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
+    flangerR.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
+    AudioInterrupts();
+    Serial1.print("Flanger: offset=");
+    Serial1.print(flangerOffset);
+    Serial1.print(", depth=");
+    Serial1.print(flangerDepth);
+    Serial1.print(", freq=");
+    Serial1.println(flangerFreqCoarse+flangerFreqFine);    
+  } else {
+    flangerL.voices(FLANGE_DELAY_PASSTHRU,0,0);
+    flangerR.voices(FLANGE_DELAY_PASSTHRU,0,0);        
+  }
+}
+
 void resetAll() {
   polyMode       = POLY;
   filterMode     = FILTEROFF;
@@ -332,7 +372,14 @@ void resetAll() {
   envDecay   = 50;
   envSustain = 0.75;
   envRelease = 50;
-  
+
+  // FX
+  flangerOn         = false;
+  flangerOffset     = DELAY_LENGTH/4;
+  flangerDepth      = DELAY_LENGTH/16;
+  flangerFreqCoarse = 0;
+  flangerFreqFine   = .5;
+
   updateFilterMode();
   updateEnvelope();
   updatePan();
@@ -420,12 +467,14 @@ inline void oscOff( Oscillator& osc) {
     osc.wf->amplitude(0);
   notesDel(notesOn,osc.note);
   osc.note = -1;
+  osc.velocity = 0;
 }
 
 inline void allOff() {
   for (uint8_t i=0; i<NVOICES; ++i) {
     oscOff(oscs[i]);
-    oscs[i].wf->amplitude(0);
+    if (envOn)
+      oscs[i].wf->amplitude(0);
   }
   notesReset(notesOn);
 }
@@ -463,7 +512,9 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
         }
       }
       if (!curOsc && notesOn[0] != -1) {
+#ifdef SYNTH_DEBUG
         Serial1.println("Stealing voice");
+#endif
         curOsc = OnNoteOffReal(channel,notesOn[0],velocity,true);
       }
       if (!curOsc) return;
@@ -525,15 +576,6 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
   if (channel != SYNTH_MIDICHANNEL) return;
 #endif
 
-#ifdef SYNTH_DEBUG
-  Serial1.print("ControlChange: channel ");
-  Serial1.print(channel);
-  Serial1.print(", control ");
-  Serial1.print(control);
-  Serial1.print(", value ");
-  Serial1.println(value);
-#endif
-
   switch (control) {
     case 0: // bank select, do nothing (switch sounds via program change only)
       break;
@@ -556,20 +598,14 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     case 14: // filter frequency
       filtFreq = value/2.5*AUDIO_SAMPLE_RATE_EXACT/127.;
       updateFilter();
-      Serial1.print("Frequency: ");
-      Serial1.println(filtFreq);
       break;
     case 15: // filter resonance
       filtReso = value*4.1/127.+0.9;
       updateFilter();
-      Serial1.print("Resonance: ");
-      Serial1.println(filtReso);
       break;
     case 16: // filter octave control
       filtOcta = value*7./127.;
       updateFilter();
-      Serial1.print("Octave Control: ");
-      Serial1.println(filtOcta);
      break;
     case 17: // filter mode
       if (value < FILTERMODE_N) {
@@ -612,8 +648,31 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
       pulseWidth = value/127.;
       updatePulseWidth();
       break;
+    case 25: // flanger toggle
+      if (value < 2)
+        flangerOn = bool(value);
+      else
+        flangerOn = !flangerOn;
+      updateFlanger();
+      break;
+    case 26: // flanger offset
+      flangerOffset = int(value/127.*8)*DELAY_LENGTH/8;
+      updateFlanger();
+      break;
+    case 27: // flanger depth
+      flangerDepth = int(value/127.*8)*DELAY_LENGTH/8;
+      updateFlanger();
+      break;
+    case 28: // flanger coarse frequency
+      flangerFreqCoarse = value/127.*10.;
+      updateFlanger();
+      break;
+    case 29: // flanger fine frequency
+      flangerFreqFine = value/127.;
+      updateFlanger();
+      break;
     case 64: // sustain/damper pedal
-      if (value > 64) {
+      if (value > 63) {
         sustainPressed = true;
       } else {
         sustainPressed = false;
@@ -631,8 +690,14 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
       allOff();
       break;
     default:
-      Serial1.print("Unhandled Control Change ");
-      Serial1.println(control);
+#ifdef SYNTH_DEBUG
+  Serial1.print("Unhandled Control Change: channel ");
+  Serial1.print(channel);
+  Serial1.print(", control ");
+  Serial1.print(control);
+  Serial1.print(", value ");
+  Serial1.println(value);
+#endif
       break;
   }    
 }
@@ -690,26 +755,48 @@ void OnAfterTouch(uint8_t channel, uint8_t pressure) {
 }
 
 void OnSysEx( const uint8_t *data, uint16_t length, bool complete) {
+#ifdef SYNTH_DEBUG
   Serial1.print("SysEx: length ");
   Serial1.print(length);
   Serial1.print(", complete ");
   Serial1.println(complete);
+#endif
 }
 
 void OnRealTimeSystem(uint8_t realtimebyte) {
+#ifdef SYNTH_DEBUG
   Serial1.print("RealTimeSystem: ");
   Serial1.println(realtimebyte);
+#endif
 }
 
 void OnTimeCodeQFrame(uint16_t data)
 {
+#ifdef SYNTH_DEBUG
   Serial1.print("TimeCodeQuarterFrame: ");
-  Serial1.println(data);  
+  Serial1.println(data);
+#endif
 }
         
 //////////////////////////////////////////////////////////////////////
 // Debugging functions
 //////////////////////////////////////////////////////////////////////
+#ifdef SYNTH_DEBUG
+void oscDump(uint8_t idx) {
+  Serial1.print("Oscillator ");
+  Serial1.print(idx);
+  oscDump(oscs[idx]);
+}
+
+void oscDump(const Oscillator& o) {
+  Serial1.print(" note=");
+  Serial1.print(o.note);
+  Serial1.print(", velocity=");
+  Serial1.print(o.velocity);  
+  Serial1.print(", offTime=");
+  Serial1.println(o.offTime);  
+}
+
 inline void notesDump(int8_t* notes) {
   for (uint8_t i=0; i<NVOICES; ++i) {
     Serial1.print(' ');
@@ -727,29 +814,65 @@ inline void printResources( float cpu, uint8_t mem) {
 
 void performanceCheck() {
   static unsigned long last = 0;
-  static float   lastCpu = 0;
-  static uint8_t lastMem = 0;
   unsigned long now = millis();
   if ((now-last)>1000) {
     last = now;
-    float   cpu = AudioProcessorUsageMax();
+    float cpu = AudioProcessorUsageMax();
     uint8_t mem = AudioMemoryUsageMax();
-    if( (lastMem!=mem) || fabs(lastCpu-cpu)>1) {
+    if( (statsMem!=mem) || fabs(statsCpu-cpu)>1) {
       printResources( cpu, mem);
     }   
     AudioProcessorUsageMaxReset();
     AudioMemoryUsageMaxReset();
     last = now;
-    lastCpu = cpu;
-    lastMem = mem;
+    statsCpu = cpu;
+    statsMem = mem;
   }
 }
+
+void printInfo() {
+  Serial1.print("Delay line length: ");
+  Serial1.println(DELAY_LENGTH);
+}
+
+void selectCommand(char c) {
+  switch (c) {
+    case '\r':
+      Serial1.println();
+      break;
+    case 'b':
+      Serial1.print("Notes Pressed:");
+      notesDump(notesPressed);
+      Serial1.print("Notes On:     ");
+      notesDump(notesOn);
+      break;
+    case 'o':
+      for (uint8_t i=0; i<NVOICES; ++i)
+        oscDump(i);
+      break;
+    case 's':
+      printResources(statsCpu,statsMem);
+      break;
+    case 'r':
+      resetAll();
+      break;
+    case 'i':
+      printInfo();
+      break;
+    default:
+      break;
+  }   
+}
+
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // setup() and loop()
 //////////////////////////////////////////////////////////////////////
 void setup() {
+#ifdef SYNTH_DEBUG
   Serial1.begin(115200);
+#endif
   
   AudioMemory(AMEMORY);
   sgtl5000_1.enable();
@@ -758,8 +881,11 @@ void setup() {
   resetAll();
   toggleEnvelope();
   updateProgram();
-  delay(1000);
   
+  flangerL.begin(delaylineL,DELAY_LENGTH,FLANGE_DELAY_PASSTHRU,0,0);
+  flangerR.begin(delaylineR,DELAY_LENGTH,FLANGE_DELAY_PASSTHRU,0,0);
+  updateFlanger();
+
   usbMIDI.setHandleNoteOff(OnNoteOff);
   usbMIDI.setHandleNoteOn(OnNoteOn);
   usbMIDI.setHandleControlChange(OnControlChange);
@@ -770,32 +896,22 @@ void setup() {
   //usbMIDI.setHandleRealTimeSystem(OnRealTimeSystem);
   usbMIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
  
+  delay(1000);
+
+#ifdef SYNTH_DEBUG
   Serial1.println();
   Serial1.println("TeensySynth v0.1");
+#endif
 }
 
 void loop() {
   usbMIDI.read();
   updateMasterVolume();
+
 #ifdef SYNTH_DEBUG
   performanceCheck();
   while (Serial1.available())
-  {
-    
-    switch (Serial1.read()) {
-      case ('\r'):
-        Serial1.println();
-        break;
-      case ('b'):
-        Serial1.print("Notes Pressed:");
-        notesDump(notesPressed);
-        Serial1.print("Notes On:     ");
-        notesDump(notesOn);
-        break;
-      default:
-        break;
-    }   
-  }
+    selectCommand(Serial1.read());
 #endif
 }
 
