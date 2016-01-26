@@ -1,8 +1,4 @@
 #include <Audio.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
-#include <SerialFlash.h>
 
 // define SYNTH_DEBUG to enable debug logging on HWSerial 1 (digital pins 0/1)
 #define SYNTH_DEBUG
@@ -18,12 +14,6 @@
 
 // Audio architecture generated with
 // http://www.pjrc.com/teensy/gui/
-
-#include <Audio.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
-#include <SerialFlash.h>
 
 // GUItool: begin automatically generated code
 AudioSynthWaveform       waveform1;      //xy=80,180
@@ -338,12 +328,14 @@ void updateFlanger() {
     flangerL.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
     flangerR.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
     AudioInterrupts();
+#ifdef SYNTH_DEBUG
     Serial1.print("Flanger: offset=");
     Serial1.print(flangerOffset);
     Serial1.print(", depth=");
     Serial1.print(flangerDepth);
     Serial1.print(", freq=");
     Serial1.println(flangerFreqCoarse+flangerFreqFine);    
+#endif
   } else {
     flangerL.voices(FLANGE_DELAY_PASSTHRU,0,0);
     flangerR.voices(FLANGE_DELAY_PASSTHRU,0,0);        
