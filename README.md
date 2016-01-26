@@ -3,17 +3,24 @@
 ### Features
 * 8-voice polyphony
 * 6 waveforms: sine, square, triangle, sawtooth, reverse sawtooth, pulse
-* filter and amplitude per voice
+* filter and amplitube envelope per voice
 * MONO and POLY mode
 
 ### Supported MIDI controls
 * Channel volume
 * Channel pan
 * Sustain pedal
+* Envelope controls
+* Filter controls
+* Effect controls
 
-### TODO
+For details refer to [controls.txt](https://raw.githubusercontent.com/jmechnich/TeensySynth/master/controls.txt).
+
+### Wishlist
  * Portamento
  * Arpeggiator
+ * Filter LFO/envelope
+ * Modulation
 
 ### Useful links
 * [Teensy Audio Library](http://www.pjrc.com/teensy/td_libs_Audio.html)
