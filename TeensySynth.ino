@@ -12,6 +12,11 @@
 // define tuning of A4 in Hz
 #define SYNTH_TUNING 440
 
+// gain in final mixer stage for POLY mode
+// (0.25 is the safe value but 1 sounds better :) )
+#define POLY_GAIN 0.75
+//#define POLY_GAIN 0.25
+
 // Audio architecture generated with
 // http://www.pjrc.com/teensy/gui/
 
@@ -153,12 +158,10 @@ struct Oscillator {
   AudioEffectEnvelope*      env;
   int8_t  note;
   uint8_t velocity;
-
-  unsigned long offTime;
 };
 
 #define NVOICES 8
-Oscillator oscs[NVOICES+1] = {
+Oscillator oscs[NVOICES] = {
   { &waveform1, &filter1, &mixer1, &envelope1, -1, 0 },
   { &waveform2, &filter2, &mixer2, &envelope2, -1, 0 },
   { &waveform3, &filter3, &mixer3, &envelope3, -1, 0 },
@@ -167,7 +170,6 @@ Oscillator oscs[NVOICES+1] = {
   { &waveform6, &filter6, &mixer6, &envelope6, -1, 0 },
   { &waveform7, &filter7, &mixer7, &envelope7, -1, 0 },
   { &waveform8, &filter8, &mixer7, &envelope8, -1, 0 },
-  0,
 };
 
 enum PolyMode_t {
@@ -239,36 +241,38 @@ float   statsCpu = 0;
 uint8_t statsMem = 0;
 
 inline void notesReset(int8_t* notes) {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    notes[i] = -1;
-  }
+  memset(notes,-1,NVOICES*sizeof(int8_t));
 }
 
 inline void notesAdd(int8_t* notes, uint8_t note) {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    if(notes[i]==-1) {
-      notes[i] = note;
+  int8_t *end=notes+NVOICES;
+  do {
+    if(*notes == -1) {
+      *notes = note;
       break;
     }
-  }
+  } while (++notes < end);
 }
 
-inline void notesDel(int8_t* notes, uint8_t note) {
-  uint8_t i=1;
-  for ( ; i < NVOICES && notes[i-1] != note; ++i);
-  for ( ; i < NVOICES; ++i) {
-    notes[i-1] = notes[i];
-    if (notes[i]==-1)
-      break;
+inline int8_t notesDel(int8_t* notes, uint8_t note) {
+  int8_t lastNote = -1;
+  int8_t *pos=notes, *end=notes+NVOICES;
+  while (++pos < end && *(pos-1) != note);
+  if (pos-1 != notes) lastNote = *(pos-2);
+  while (pos < end) {
+    *(pos-1) = *pos;
+    if (*pos++ == -1) break;
   }
-  if (notes[NVOICES-1]==note || i == NVOICES)
-    notes[NVOICES-1] = -1;
+  if (*(end-1)==note || pos == end)
+      *(end-1) = -1;
+  return lastNote;
 }
 
 inline bool notesFind(int8_t* notes, uint8_t note) {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    if (notes[i]==note) return true;
-  }
+  int8_t *end=notes+NVOICES;
+  do {
+    if (*notes == note) return true;
+  } while (++notes < end);
   return false;
 }
 
@@ -276,38 +280,40 @@ inline bool notesFind(int8_t* notes, uint8_t note) {
 // Parameter control functions
 //////////////////////////////////////////////////////////////////////
 inline void updateFilterMode() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
     for (uint8_t fm=0; fm<FILTERMODE_N; ++fm) {
-      if (fm == filterMode)
-        oscs[i].mix->gain(fm,1);
-      else
-        oscs[i].mix->gain(fm,0);
+      if (fm == filterMode) o->mix->gain(fm,1);
+      else                  o->mix->gain(fm,0);
     }
-  }
+  } while (++o < end);
 }
 
 inline void updateFilter() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    oscs[i].filt->frequency(filtFreq);
-    oscs[i].filt->resonance(filtReso);
-    oscs[i].filt->octaveControl(filtOcta);
-  }
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    o->filt->frequency(filtFreq);
+    o->filt->resonance(filtReso);
+    o->filt->octaveControl(filtOcta);
+  } while (++o < end);
 }
 
 inline void updateEnvelope() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    oscs[i].env->delay(envDelay);
-    oscs[i].env->attack(envAttack);
-    oscs[i].env->hold(envHold);
-    oscs[i].env->decay(envDecay);
-    oscs[i].env->sustain(envSustain);
-    oscs[i].env->release(envRelease);
-  }
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    o->env->delay(envDelay);
+    o->env->attack(envAttack);
+    o->env->hold(envHold);
+    o->env->decay(envDecay);
+    o->env->sustain(envSustain);
+    o->env->release(envRelease);
+  } while (++o < end);
 }
 
-inline void toggleEnvelope() {
-  float env   = envOn ? 0.5 : 0;
-  float noenv = envOn ? 0 : 0.5;
+inline void updateEnvelopeMode() {
+  float gainOn = polyMode == POLY ? 0.5 : 1;
+  float env    = envOn ? gainOn : 0;
+  float noenv  = envOn ? 0 : gainOn;
   for (uint8_t i=0; i<2; ++i) {
     // env
     envmixer1.gain(i,env);
@@ -357,7 +363,7 @@ void resetAll() {
   filtOcta = 0;
 
   // envelope
-  envOn      = true;
+  envOn      = false;
   envDelay   = 0;
   envAttack  = 50;
   envHold    = 50;
@@ -372,48 +378,56 @@ void resetAll() {
   flangerFreqCoarse = 0;
   flangerFreqFine   = .5;
 
+  updatePolyMode();
   updateFilterMode();
   updateEnvelope();
   updatePan();
 }
 
 inline void updateProgram() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    if (currentProgram==5) {
-      oscs[i].wf->pulseWidth(pulseWidth);
-    }
-    oscs[i].wf->begin(progs[currentProgram]);
-  }
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    if (currentProgram==5) o->wf->pulseWidth(pulseWidth);
+    o->wf->begin(progs[currentProgram]);
+  } while(++o < end);
 }
 
 inline void updatePulseWidth() {
   if (currentProgram!=5) return;
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    if (oscs[i].note < 0) continue;
-    oscs[i].wf->pulseWidth(pulseWidth);
-  }
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    if (o->note < 0) continue;
+    o->wf->pulseWidth(pulseWidth);
+  } while(++o < end);
 }
 
 inline void updatePitch() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    int8_t note = oscs[i].note;
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    int8_t note = o->note;
     if (note < 0) continue;
     note -= 69; 
-    oscs[i].wf->frequency(SYNTH_TUNING * pow(2,note/12.+pitchBend));
-  }
+    o->wf->frequency(SYNTH_TUNING * pow(2,note/12.+pitchBend));
+  } while(++o < end);
 }
 
 inline void updateVolume() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    if (oscs[i].note < 0) continue;
-    oscs[i].wf->amplitude(oscs[i].velocity/127.*channelVolume);
-  }
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    if (o->note < 0) continue;
+    o->wf->amplitude(o->velocity/127.*channelVolume);
+  } while(++o < end);
 }
 
 inline void updatePan() {
+  float norm  = polyMode == POLY ? POLY_GAIN : 1;
+  float left=norm, right=norm;
+  if (panorama < 0.5) right *= 2*panorama;
+  else left *= 2*(1-panorama);
+
   for (uint8_t i=0; i<4; ++i) {
-    mixerL.gain(i,(1-panorama)/4.);
-    mixerR.gain(i,panorama/4.);
+    mixerL.gain(i,left);
+    mixerR.gain(i,right);
   }
 }
 
@@ -430,14 +444,23 @@ inline void updateMasterVolume() {
   }
 }
 
+inline void updatePolyMode() {
+  allOff();
+  updateEnvelopeMode();
+  updatePan();
+}
+
 //////////////////////////////////////////////////////////////////////
 // Oscillator control functions
 //////////////////////////////////////////////////////////////////////
-inline void oscOn( Oscillator& osc, int8_t note, uint8_t velocity) {
+inline float noteToFreq(float note) {
+  // Sets all notes as an offset of A4 (#69)
+  return SYNTH_TUNING*pow(2,(note - 69)/12.+pitchBend);
+}
+
+inline void oscOn(Oscillator& osc, int8_t note, uint8_t velocity) {
   if (osc.note!=note) {
-    // Sets all notes as an offset of A4 (#69)
-    int8_t noteNumberAfterOffset = note - 69; 
-    osc.wf->frequency(SYNTH_TUNING * pow(2,noteNumberAfterOffset/12.+pitchBend));
+    osc.wf->frequency(noteToFreq(note));
     notesAdd(notesOn,note);
     osc.wf->amplitude(velocity/127.*channelVolume);
     osc.velocity = velocity;
@@ -452,7 +475,7 @@ inline void oscOn( Oscillator& osc, int8_t note, uint8_t velocity) {
   }
 }
 
-inline void oscOff( Oscillator& osc) {
+inline void oscOff(Oscillator& osc) {
   if (envOn)
     osc.env->noteOff();
   else
@@ -463,11 +486,11 @@ inline void oscOff( Oscillator& osc) {
 }
 
 inline void allOff() {
-  for (uint8_t i=0; i<NVOICES; ++i) {
-    oscOff(oscs[i]);
-    if (envOn)
-      oscs[i].wf->amplitude(0);
-  }
+  Oscillator *o=oscs,*end=oscs+NVOICES;
+  do {
+    oscOff(*o);
+    if (envOn) o->wf->amplitude(0);
+  } while(++o < end);
   notesReset(notesOn);
 }
 
@@ -485,39 +508,37 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 
   notesAdd(notesPressed,note);
 
-  Oscillator* curOsc = 0;
-  if (sustainPressed && notesFind(notesOn,note)) {
-    for (uint8_t i=0; i<NVOICES; ++i) {
-      if (oscs[i].note == note) {
-        curOsc = &oscs[i];
+  Oscillator *curOsc=0, *o=oscs, *end=oscs+NVOICES;
+  switch(polyMode) {
+  case POLY:
+    if (sustainPressed && notesFind(notesOn,note)) {
+      do {
+        if (o->note == note) {
+          curOsc = o;
+          break;
+        }
+      } while (++o < end);
+    }
+    for (o=oscs; o < end && !curOsc; ++o) {
+      if (o->note < 0) {
+        curOsc = o;
         break;
       }
     }
-  }
-  
-  switch(polyMode) {
-    case(POLY):
-      for (uint8_t i=0; i<NVOICES && !curOsc; ++i) {
-        if (oscs[i].note < 0) {
-          curOsc = &oscs[i];
-          break;
-        }
-      }
-      if (!curOsc && notesOn[0] != -1) {
+    if (!curOsc && *notesOn != -1) {
 #ifdef SYNTH_DEBUG
-        Serial1.println("Stealing voice");
+      Serial1.println("Stealing voice");
 #endif
-        curOsc = OnNoteOffReal(channel,notesOn[0],velocity,true);
-      }
-      if (!curOsc) return;
-      oscOn( *curOsc, note, velocity);
-      break;
-    case(MONO):
-      curOsc = &oscs[0];
-      oscOn( *curOsc, note, velocity);
-      break;
-    default:
-      break;
+      curOsc = OnNoteOffReal(channel,*notesOn,velocity,true);
+    }
+    if (!curOsc) return;
+    oscOn(*curOsc, note, velocity);
+    break;
+  case MONO:
+    oscOn(*oscs, note, velocity);
+    break;
+  default:
+    break;
   }
 
   return;
@@ -531,32 +552,30 @@ Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.println("NoteOff");
 #endif
-  notesDel(notesPressed,note);
+  int8_t lastNote = notesDel(notesPressed,note);
 
   if (sustainPressed && !ignoreSustain) return 0;
 
-  Oscillator* curOsc = 0;
+  Oscillator *o=oscs, *end=oscs+NVOICES;
   switch(polyMode) {
-    case(POLY):
-      for (uint8_t i=0; i<NVOICES; ++i) {
-        if (oscs[i].note == note) {
-          curOsc = &oscs[i];
-          break;
-        }
-      }
-      if (!curOsc) return 0;
-      oscOff(*curOsc);
-      break;
-    case (MONO):
-      curOsc = &oscs[0];
-      if (curOsc->note == note)
-        oscOff(*curOsc);
-      break;
-    default:
-      break;
+  casePOLY:
+    do {
+      if (o->note == note) break;
+    } while (++o < end);
+    if (o == end) return 0;
+    oscOff(*o);
+    break;
+  case MONO:
+    if (oscs->note == note) {
+      oscOff(*o);
+      if (lastNote != -1) oscOn(*o, lastNote, velocity);
+    }
+    break;
+  default:
+    break;
   }
   
-  return curOsc;
+  return o;
 }
 
 inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
@@ -613,12 +632,12 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
       } else {
         polyMode = PolyMode_t((polyMode+1)%POLYMODE_N);
       }
-      allOff();
+      updatePolyMode();
       break;
     case 19: // envelope mode
       allOff();
       envOn = !envOn;
-      toggleEnvelope();
+      updateEnvelopeMode();
       break;
     case 20: // delay
       envDelay = value*200./127.;
@@ -668,11 +687,10 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
         sustainPressed = true;
       } else {
         sustainPressed = false;
-        for (uint8_t i=0; i<NVOICES; ++i) {
-          if (oscs[i].note != -1 && !notesFind(notesPressed,oscs[i].note)) {
-            oscOff(oscs[i]);
-          }
-        }
+        Oscillator *o=oscs, *end=oscs+NVOICES;
+        do {
+          if (o->note != -1 && !notesFind(notesPressed,o->note)) oscOff(*o);
+        } while (++o < end);
       }
       break;
     case 121: // controller reset
@@ -683,12 +701,12 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
       break;
     default:
 #ifdef SYNTH_DEBUG
-  Serial1.print("Unhandled Control Change: channel ");
-  Serial1.print(channel);
-  Serial1.print(", control ");
-  Serial1.print(control);
-  Serial1.print(", value ");
-  Serial1.println(value);
+      Serial1.print("Unhandled Control Change: channel ");
+      Serial1.print(channel);
+      Serial1.print(", control ");
+      Serial1.print(control);
+      Serial1.print(", value ");
+      Serial1.println(value);
 #endif
       break;
   }    
@@ -784,9 +802,7 @@ void oscDump(const Oscillator& o) {
   Serial1.print(" note=");
   Serial1.print(o.note);
   Serial1.print(", velocity=");
-  Serial1.print(o.velocity);  
-  Serial1.print(", offTime=");
-  Serial1.println(o.offTime);  
+  Serial1.println(o.velocity);  
 }
 
 inline void notesDump(int8_t* notes) {
@@ -871,7 +887,6 @@ void setup() {
   sgtl5000_1.volume(masterVolume);
 
   resetAll();
-  toggleEnvelope();
   updateProgram();
   
   flangerL.begin(delaylineL,DELAY_LENGTH,FLANGE_DELAY_PASSTHRU,0,0);
@@ -906,4 +921,3 @@ void loop() {
     selectCommand(Serial1.read());
 #endif
 }
-
