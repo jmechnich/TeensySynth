@@ -4,6 +4,12 @@ CC# | Name                   | Function
   0 | Bank select            | ignored, only uses program change
   5 | Portamento time        | changes portamento time       (range: ?)
   7 | Volume                 | changes amplitude for all oscillators
+--------------------------------------------------------------------------------
+  9 | Fix volume             | MIDI value
+    |                        |   0      ignore note velocities (fixed volume)
+    |                        |   1      respect note velocities (default)
+    |                        |   2-127  toggle fixed volume on/off
+--------------------------------------------------------------------------------
  10 | Panorama               | changes L/R balance
 --------------------------------------------------------------------------------
  12 | Envelope attack        | changes envelope attack time  (range: 0-200 ms)
@@ -11,7 +17,7 @@ CC# | Name                   | Function
 --------------------------------------------------------------------------------
  14 | Filter frequency       | changes filter freqeuncy      (range: ~20-17k Hz)
  15 | Filter resonance       | changes filter resonance Q    (range: 0.9-5.0)
- 16 | Filter octave ctrl     | changes filter octave control (range: 0.0-7.0)
+ 16 | Filter attenuation     | changes post-filter gain      (range: 0.0-1.0)
  17 | Filter mode            | MIDI value
     |                        |   0      low-pass
     |                        |   1      band-pass

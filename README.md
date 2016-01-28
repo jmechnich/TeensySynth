@@ -22,6 +22,7 @@ For details refer to [controls.txt](https://raw.githubusercontent.com/jmechnich/
  * Arpeggiator
  * Filter LFO/envelope
  * Modulation
+ * improve filter / implement proper gain attenuation
 
 ### Useful links
 * [Teensy Audio Library](http://www.pjrc.com/teensy/td_libs_Audio.html)

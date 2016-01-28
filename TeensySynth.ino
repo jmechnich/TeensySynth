@@ -7,15 +7,23 @@
 #define SYNTH_MIDICHANNEL 1
 
 // inital poly mode (POLY, MONO or PORTAMENTO)
-#define SYNTH_INITIALMODE PORTAMENTO
+#define SYNTH_INITIALMODE POLY
 
 // define tuning of A4 in Hz
 #define SYNTH_TUNING 440
 
-// gain in final mixer stage for POLY mode
+
+// gain at oscillator/filter input stage (1:1)
+// keep low so filter does not saturate with resonance
+#define GAIN_OSC 0.5
+
+// gain in final mixer stage for polyphonic mode (4:1)
 // (0.25 is the safe value but larger sounds better :) )
-#define POLY_GAIN 0.75
-//#define POLY_GAIN 0.25
+#define GAIN_POLY 1
+//#define GAIN_POLY 0.25
+
+// gain in final mixer stage for monophonic modes
+#define GAIN_MONO 1.
 
 // Audio architecture generated with
 // http://www.pjrc.com/teensy/gui/
@@ -199,6 +207,7 @@ uint8_t currentProgram = 3;
 
 bool  polyOn;
 bool  omniOn;
+bool  velocityOn;
 
 bool  sustainPressed;
 float channelVolume;
@@ -210,7 +219,7 @@ float pitchBend;
 FilterMode_t filterMode;
 float filtFreq; // 20-AUDIO_SAMPLE_RATE_EXACT/2.5
 float filtReso; // 0.9-5.0
-float filtOcta; // 0-7
+float filtAtt;  // 0-1
 
 // envelope
 bool  envOn;
@@ -235,11 +244,11 @@ int8_t   portamentoDir;
 float    portamentoStep;
 float    portamentoPos;
 
+//////////////////////////////////////////////////////////////////////
+// Handling of sounding and pressed notes
+//////////////////////////////////////////////////////////////////////
 int8_t notesOn[NVOICES]      = { -1, -1, -1, -1, -1, -1, -1, -1, };
 int8_t notesPressed[NVOICES] = { -1, -1, -1, -1, -1, -1, -1, -1, };
-
-float   statsCpu = 0;
-uint8_t statsMem = 0;
 
 inline void notesReset(int8_t* notes) {
   memset(notes,-1,NVOICES*sizeof(int8_t));
@@ -284,7 +293,7 @@ inline void updateFilterMode() {
   Oscillator *o=oscs,*end=oscs+NVOICES;
   do {
     for (uint8_t fm=0; fm<FILTERMODE_N; ++fm) {
-      if (fm == filterMode) o->mix->gain(fm,1);
+      if (fm == filterMode) o->mix->gain(fm,filtAtt);
       else                  o->mix->gain(fm,0);
     }
   } while (++o < end);
@@ -295,7 +304,6 @@ inline void updateFilter() {
   do {
     o->filt->frequency(filtFreq);
     o->filt->resonance(filtReso);
-    o->filt->octaveControl(filtOcta);
   } while (++o < end);
 }
 
@@ -312,9 +320,8 @@ inline void updateEnvelope() {
 }
 
 inline void updateEnvelopeMode() {
-  float gainOn = (polyOn && !portamentoOn) ? 0.5 : 1;
-  float env    = envOn ? gainOn : 0;
-  float noenv  = envOn ? 0 : gainOn;
+  float env    = envOn ? 1 : 0;
+  float noenv  = envOn ? 0 : 1;
   for (uint8_t i=0; i<2; ++i) {
     // env
     envmixer1.gain(i,env);
@@ -350,8 +357,9 @@ void updateFlanger() {
 }
 
 void resetAll() {
-  polyOn = true;
-  omniOn = false;
+  polyOn     = true;
+  omniOn     = false;
+  velocityOn = true;
   
   filterMode     = FILTEROFF;
   sustainPressed = false;
@@ -361,18 +369,18 @@ void resetAll() {
   pitchBend      = 0;
 
   // filter
-  filtFreq = 10000.;
-  filtReso = 0.7;
-  filtOcta = 0;
+  filtFreq = 15000.;
+  filtReso = 0.9;
+  filtAtt  = 1.;
 
   // envelope
   envOn      = false;
   envDelay   = 0;
-  envAttack  = 50;
-  envHold    = 50;
-  envDecay   = 50;
-  envSustain = 0.75;
-  envRelease = 50;
+  envAttack  = 20;
+  envHold    = 0;
+  envDecay   = 0;
+  envSustain = 1;
+  envRelease = 20;
 
   // FX
   flangerOn         = false;
@@ -421,14 +429,16 @@ inline void updatePitch() {
 
 inline void updateVolume() {
   Oscillator *o=oscs,*end=oscs+NVOICES;
+  float velocity;
   do {
     if (o->note < 0) continue;
-    o->wf->amplitude(o->velocity/127.*channelVolume);
+    velocity = velocityOn ? o->velocity/127. : 1;
+    o->wf->amplitude(velocity*channelVolume*GAIN_OSC);
   } while(++o < end);
 }
 
 inline void updatePan() {
-  float norm  = (polyOn && !portamentoOn) ? POLY_GAIN : 1;
+  float norm  = (polyOn && !portamentoOn) ? GAIN_POLY : GAIN_MONO;
   float left=norm, right=norm;
   if (panorama < 0.5) right *= 2*panorama;
   else left *= 2*(1-panorama);
@@ -491,19 +501,18 @@ inline float noteToFreq(float note) {
 }
 
 inline void oscOn(Oscillator& osc, int8_t note, uint8_t velocity) {
+  float v = velocityOn ? velocity/127. : 1;
   if (osc.note!=note) {
     if (portamentoOn) osc.wf->frequency(noteToFreq(portamentoPos));
     else  osc.wf->frequency(noteToFreq(note));
     notesAdd(notesOn,note);
     if (envOn && !osc.velocity) osc.env->noteOn();
-    osc.wf->amplitude(velocity/127.*channelVolume);
+    osc.wf->amplitude(v*channelVolume*GAIN_OSC);
     osc.velocity = velocity;
     osc.note = note;
-  } else {
-    if (velocity > osc.velocity) {
-      osc.wf->amplitude(velocity/127.*channelVolume);
-      osc.velocity = velocity;
-    }
+  } else if (velocity > osc.velocity) {
+    osc.wf->amplitude(v*channelVolume*GAIN_OSC);
+    osc.velocity = velocity;
   }
 }
 
@@ -648,6 +657,17 @@ inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
   OnNoteOffReal(channel,note,velocity,false);
 }
 
+void OnAfterTouchPoly(uint8_t channel, uint8_t note, uint8_t value) {
+#ifdef SYNTH_DEBUG
+  Serial1.print("AfterTouchPoly: channel ");
+  Serial1.print(channel);
+  Serial1.print(", note ");
+  Serial1.print(note);
+  Serial1.print(", value ");
+  Serial1.println(value);
+#endif
+}
+
 void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
@@ -664,6 +684,19 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
   case 7: // volume
     channelVolume = value/127.;
     updateVolume();
+    break;
+  case 9: // fix volume
+    switch (value) {
+    case 0:
+      velocityOn = false;
+      break;
+    case 1:
+      velocityOn = true;
+      break;
+    default:
+      velocityOn = !velocityOn;
+      break;
+    }
     break;
   case 10: // pan
     panorama = value/127.;
@@ -685,9 +718,9 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     filtReso = value*4.1/127.+0.9;
     updateFilter();
     break;
-  case 16: // filter octave control
-    filtOcta = value*7./127.;
-    updateFilter();
+  case 16: // filter attenuation
+    filtAtt = value/127.;
+    updateEnvelopeMode();
     break;
   case 17: // filter mode
     if (value < FILTERMODE_N) {
@@ -909,6 +942,9 @@ void OnTimeCodeQFrame(uint16_t data)
 // Debugging functions
 //////////////////////////////////////////////////////////////////////
 #ifdef SYNTH_DEBUG
+float   statsCpu = 0;
+uint8_t statsMem = 0;
+
 void oscDump(uint8_t idx) {
   Serial1.print("Oscillator ");
   Serial1.print(idx);
@@ -1024,6 +1060,7 @@ void setup() {
 
   usbMIDI.setHandleNoteOff(OnNoteOff);
   usbMIDI.setHandleNoteOn(OnNoteOn);
+  usbMIDI.setHandleVelocityChange(OnAfterTouchPoly);
   usbMIDI.setHandleControlChange(OnControlChange);
   usbMIDI.setHandlePitchChange(OnPitchChange);
   usbMIDI.setHandleProgramChange(OnProgramChange);
