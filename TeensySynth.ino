@@ -404,10 +404,8 @@ inline void updatePulseWidth() {
 inline void updatePitch() {
   Oscillator *o=oscs,*end=oscs+NVOICES;
   do {
-    int8_t note = o->note;
-    if (note < 0) continue;
-    note -= 69; 
-    o->wf->frequency(SYNTH_TUNING * pow(2,note/12.+pitchBend));
+    if (o->note < 0) continue;
+    o->wf->frequency(noteToFreq(o->note));
   } while(++o < end);
 }
 
@@ -449,6 +447,9 @@ inline void updatePolyMode() {
   updateEnvelopeMode();
   updatePan();
 }
+
+inline void updatePortamento()
+{}
 
 //////////////////////////////////////////////////////////////////////
 // Oscillator control functions
@@ -553,12 +554,12 @@ Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool 
   Serial1.println("NoteOff");
 #endif
   int8_t lastNote = notesDel(notesPressed,note);
-
+  
   if (sustainPressed && !ignoreSustain) return 0;
 
   Oscillator *o=oscs, *end=oscs+NVOICES;
   switch(polyMode) {
-  casePOLY:
+  case POLY:
     do {
       if (o->note == note) break;
     } while (++o < end);
@@ -867,6 +868,9 @@ void selectCommand(char c) {
     case 'i':
       printInfo();
       break;
+    case ' ':
+      allOff();
+      break;
     default:
       break;
   }   
@@ -914,6 +918,7 @@ void setup() {
 void loop() {
   usbMIDI.read();
   updateMasterVolume();
+  updatePortamento();
 
 #ifdef SYNTH_DEBUG
   performanceCheck();
