@@ -5,6 +5,7 @@
 * 6 waveforms: sine, square, triangle, sawtooth, reverse sawtooth, pulse
 * filter and amplitube envelope per voice
 * MONO and POLY mode
+* Portamento
 
 ### Supported MIDI controls
 * Channel volume
@@ -13,11 +14,11 @@
 * Envelope controls
 * Filter controls
 * Effect controls
+* Portamento controls
 
 For details refer to [controls.txt](https://raw.githubusercontent.com/jmechnich/TeensySynth/master/controls.txt).
 
 ### Wishlist
- * Portamento
  * Arpeggiator
  * Filter LFO/envelope
  * Modulation

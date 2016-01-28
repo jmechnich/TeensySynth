@@ -3,17 +3,17 @@
 // define SYNTH_DEBUG to enable debug logging on HWSerial 1 (digital pins 0/1)
 #define SYNTH_DEBUG
 
-// define IGNORE_OTHERCHANNELS to only listen to MIDI channel 1
-#define IGNORE_OTHERCHANNELS
-
 // define MIDI channel
 #define SYNTH_MIDICHANNEL 1
+
+// inital poly mode (POLY, MONO or PORTAMENTO)
+#define SYNTH_INITIALMODE PORTAMENTO
 
 // define tuning of A4 in Hz
 #define SYNTH_TUNING 440
 
 // gain in final mixer stage for POLY mode
-// (0.25 is the safe value but 1 sounds better :) )
+// (0.25 is the safe value but larger sounds better :) )
 #define POLY_GAIN 0.75
 //#define POLY_GAIN 0.25
 
@@ -172,14 +172,6 @@ Oscillator oscs[NVOICES] = {
   { &waveform8, &filter8, &mixer7, &envelope8, -1, 0 },
 };
 
-enum PolyMode_t {
-  POLY,
-  MONO,
-  //MONO_L,
-  //MONO_R,
-  POLYMODE_N,
-};
-
 enum FilterMode_t {
   LOWPASS,
   BANDPASS,
@@ -205,12 +197,14 @@ uint8_t progs[NPROGS] = {
 float   masterVolume   = 0.3;
 uint8_t currentProgram = 3;
 
-PolyMode_t polyMode;
-bool       sustainPressed;
-float      channelVolume;
-float      panorama;
-float      pulseWidth;
-float      pitchBend;
+bool  polyOn;
+bool  omniOn;
+
+bool  sustainPressed;
+float channelVolume;
+float panorama;
+float pulseWidth;
+float pitchBend;
 
 // filter
 FilterMode_t filterMode;
@@ -233,6 +227,13 @@ int   flangerOffset;
 int   flangerDepth;
 float flangerFreqCoarse;
 float flangerFreqFine;
+
+// portamento
+bool     portamentoOn;
+uint16_t portamentoTime;
+int8_t   portamentoDir;
+float    portamentoStep;
+float    portamentoPos;
 
 int8_t notesOn[NVOICES]      = { -1, -1, -1, -1, -1, -1, -1, -1, };
 int8_t notesPressed[NVOICES] = { -1, -1, -1, -1, -1, -1, -1, -1, };
@@ -311,7 +312,7 @@ inline void updateEnvelope() {
 }
 
 inline void updateEnvelopeMode() {
-  float gainOn = polyMode == POLY ? 0.5 : 1;
+  float gainOn = (polyOn && !portamentoOn) ? 0.5 : 1;
   float env    = envOn ? gainOn : 0;
   float noenv  = envOn ? 0 : gainOn;
   for (uint8_t i=0; i<2; ++i) {
@@ -349,7 +350,9 @@ void updateFlanger() {
 }
 
 void resetAll() {
-  polyMode       = POLY;
+  polyOn = true;
+  omniOn = false;
+  
   filterMode     = FILTEROFF;
   sustainPressed = false;
   channelVolume  = 1.0;
@@ -377,6 +380,13 @@ void resetAll() {
   flangerDepth      = DELAY_LENGTH/16;
   flangerFreqCoarse = 0;
   flangerFreqFine   = .5;
+
+  // portamento
+  portamentoOn   = false;
+  portamentoTime = 1000;
+  portamentoDir  = 0;
+  portamentoStep = 0;
+  portamentoPos  = -1;
 
   updatePolyMode();
   updateFilterMode();
@@ -418,7 +428,7 @@ inline void updateVolume() {
 }
 
 inline void updatePan() {
-  float norm  = polyMode == POLY ? POLY_GAIN : 1;
+  float norm  = (polyOn && !portamentoOn) ? POLY_GAIN : 1;
   float left=norm, right=norm;
   if (panorama < 0.5) right *= 2*panorama;
   else left *= 2*(1-panorama);
@@ -449,7 +459,28 @@ inline void updatePolyMode() {
 }
 
 inline void updatePortamento()
-{}
+{
+  if (portamentoDir == 0) return;
+  if (oscs->note < 0) {
+    portamentoDir = 0;
+    return;
+  }
+  if (portamentoDir < 0) {
+    portamentoPos -= portamentoStep;
+    if (portamentoPos < oscs->note) {
+      portamentoPos = oscs->note;
+      portamentoDir = 0;
+    }
+  }
+  else {
+    portamentoPos += portamentoStep;
+    if (portamentoPos > oscs->note) {
+      portamentoPos = oscs->note;
+      portamentoDir = 0;
+    }
+  }
+  oscs->wf->frequency(noteToFreq(portamentoPos));
+}
 
 //////////////////////////////////////////////////////////////////////
 // Oscillator control functions
@@ -461,13 +492,13 @@ inline float noteToFreq(float note) {
 
 inline void oscOn(Oscillator& osc, int8_t note, uint8_t velocity) {
   if (osc.note!=note) {
-    osc.wf->frequency(noteToFreq(note));
+    if (portamentoOn) osc.wf->frequency(noteToFreq(portamentoPos));
+    else  osc.wf->frequency(noteToFreq(note));
     notesAdd(notesOn,note);
+    if (envOn && !osc.velocity) osc.env->noteOn();
     osc.wf->amplitude(velocity/127.*channelVolume);
     osc.velocity = velocity;
     osc.note = note;
-    if (envOn)
-      osc.env->noteOn();
   } else {
     if (velocity > osc.velocity) {
       osc.wf->amplitude(velocity/127.*channelVolume);
@@ -477,10 +508,8 @@ inline void oscOn(Oscillator& osc, int8_t note, uint8_t velocity) {
 }
 
 inline void oscOff(Oscillator& osc) {
-  if (envOn)
-    osc.env->noteOff();
-  else
-    osc.wf->amplitude(0);
+  if (envOn) osc.env->noteOff();
+  else       osc.wf->amplitude(0);
   notesDel(notesOn,osc.note);
   osc.note = -1;
   osc.velocity = 0;
@@ -490,7 +519,8 @@ inline void allOff() {
   Oscillator *o=oscs,*end=oscs+NVOICES;
   do {
     oscOff(*o);
-    if (envOn) o->wf->amplitude(0);
+    o->wf->amplitude(0);
+    o->env->noteOff();
   } while(++o < end);
   notesReset(notesOn);
 }
@@ -499,9 +529,7 @@ inline void allOff() {
 // MIDI handlers
 //////////////////////////////////////////////////////////////////////
 void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
-#ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL) return;
-#endif
+  if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.println("NoteOn");
@@ -509,9 +537,20 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 
   notesAdd(notesPressed,note);
 
-  Oscillator *curOsc=0, *o=oscs, *end=oscs+NVOICES;
-  switch(polyMode) {
-  case POLY:
+  Oscillator *o=oscs;
+  if (portamentoOn) {
+    if (portamentoTime == 0 || portamentoPos < 0) {
+      portamentoPos = note;
+      portamentoDir = 0;
+    } else if (portamentoPos > -1) {
+      portamentoDir  = note > portamentoPos ? 1 : -1;
+      portamentoStep = fabs(note-portamentoPos)/(portamentoTime);
+    }
+    *notesOn = -1;
+    oscOn(*o, note, velocity);
+  }
+  else if (polyOn) {
+    Oscillator *curOsc=0, *end=oscs+NVOICES;
     if (sustainPressed && notesFind(notesOn,note)) {
       do {
         if (o->note == note) {
@@ -534,21 +573,18 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     }
     if (!curOsc) return;
     oscOn(*curOsc, note, velocity);
-    break;
-  case MONO:
-    oscOn(*oscs, note, velocity);
-    break;
-  default:
-    break;
+  }
+  else 
+  {
+    *notesOn = -1;
+    oscOn(*o, note, velocity);
   }
 
   return;
 }
 
 Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool ignoreSustain) {
-#ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL) return 0;
-#endif
+  if (!omniOn && channel != SYNTH_MIDICHANNEL) return 0;
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.println("NoteOff");
@@ -557,23 +593,52 @@ Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool 
   
   if (sustainPressed && !ignoreSustain) return 0;
 
-  Oscillator *o=oscs, *end=oscs+NVOICES;
-  switch(polyMode) {
-  case POLY:
+  Oscillator *o=oscs;
+  if (portamentoOn) {
+    if (o->note == note) {
+      if (lastNote != -1) {
+        notesDel(notesOn,note);
+        if (portamentoTime == 0) {
+          portamentoPos = lastNote;
+          portamentoDir = 0;
+        } else {
+          portamentoDir = lastNote > portamentoPos? 1 : -1;
+          portamentoStep = fabs(lastNote-portamentoPos)/(portamentoTime);
+        }
+        oscOn(*o, lastNote, velocity);
+      }
+      else 
+      {
+        oscOff(*o);
+        portamentoPos = -1;
+        portamentoDir = 0;
+      }
+    }
+    if (oscs->note == note) {
+      if (lastNote != -1) {
+        notesDel(notesOn,o->note);
+        oscOn(*o, lastNote, velocity);
+      } else {
+        oscOff(*o);
+      }
+    }
+  }
+  else if (polyOn) {
+    Oscillator *end=oscs+NVOICES;
     do {
       if (o->note == note) break;
     } while (++o < end);
     if (o == end) return 0;
     oscOff(*o);
-    break;
-  case MONO:
+  } else {
     if (oscs->note == note) {
-      oscOff(*o);
-      if (lastNote != -1) oscOn(*o, lastNote, velocity);
+      if (lastNote != -1) {
+        notesDel(notesOn,o->note);
+        oscOn(*o, lastNote, velocity);
+      } else {
+        oscOff(*o);
+      }
     }
-    break;
-  default:
-    break;
   }
   
   return o;
@@ -584,139 +649,194 @@ inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
 }
 
 void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
-#ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL) return;
-#endif
+  if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
   switch (control) {
-    case 0: // bank select, do nothing (switch sounds via program change only)
+  case 0: // bank select, do nothing (switch sounds via program change only)
+    break;
+  case 5: // portamento time
+  {
+    float portamentoRange = portamentoStep*portamentoTime;
+    portamentoTime = value*50;
+    portamentoStep = portamentoRange/portamentoTime;
+    break;
+  }
+  case 7: // volume
+    channelVolume = value/127.;
+    updateVolume();
+    break;
+  case 10: // pan
+    panorama = value/127.;
+    updatePan();
+    break;
+  case 12: // attack
+    envAttack = value*200./127.;
+    updateEnvelope();
+    break;
+  case 13: // release
+    envRelease = value*200./127.;
+    updateEnvelope();
+    break;
+  case 14: // filter frequency
+    filtFreq = value/2.5*AUDIO_SAMPLE_RATE_EXACT/127.;
+    updateFilter();
+    break;
+  case 15: // filter resonance
+    filtReso = value*4.1/127.+0.9;
+    updateFilter();
+    break;
+  case 16: // filter octave control
+    filtOcta = value*7./127.;
+    updateFilter();
+    break;
+  case 17: // filter mode
+    if (value < FILTERMODE_N) {
+      filterMode = FilterMode_t(value);
+    } else {
+      filterMode = FilterMode_t((filterMode+1)%FILTERMODE_N);
+    }
+    updateFilterMode();
+    break;
+  case 18: // poly mode
+    switch (value) {
+    case 0:
+      polyOn = true;
+      portamentoOn = false;
       break;
-    case 7: // volume
-      channelVolume = value/127.;
-      updateVolume();
+    case 1:
+      polyOn = false;
+      portamentoOn = false;
       break;
-    case 10: // pan
-      panorama = value/127.;
-      updatePan();
+    case 2:
+      polyOn = false;
+      portamentoOn = true;
       break;
-    case 12: // attack
-      envAttack = value*200./127.;
-      updateEnvelope();
+    default: // cycle POLY, MONO, PORTAMENTO
+    {
+      bool tmp = polyOn;
+      polyOn = portamentoOn;
+      portamentoOn = !(tmp || portamentoOn);
       break;
-    case 13: // release
-      envRelease = value*200./127.;
-      updateEnvelope();
-      break;
-    case 14: // filter frequency
-      filtFreq = value/2.5*AUDIO_SAMPLE_RATE_EXACT/127.;
-      updateFilter();
-      break;
-    case 15: // filter resonance
-      filtReso = value*4.1/127.+0.9;
-      updateFilter();
-      break;
-    case 16: // filter octave control
-      filtOcta = value*7./127.;
-      updateFilter();
-     break;
-    case 17: // filter mode
-      if (value < FILTERMODE_N) {
-        filterMode = FilterMode_t(value);
-      } else {
-        filterMode = FilterMode_t((filterMode+1)%FILTERMODE_N);
-      }
-      updateFilterMode();
-      break;
-    case 18: // poly mode
-      if (value < POLYMODE_N) {
-        polyMode = PolyMode_t(value);
-      } else {
-        polyMode = PolyMode_t((polyMode+1)%POLYMODE_N);
-      }
-      updatePolyMode();
-      break;
-    case 19: // envelope mode
-      allOff();
-      envOn = !envOn;
-      updateEnvelopeMode();
-      break;
-    case 20: // delay
-      envDelay = value*200./127.;
-      updateEnvelope();
-      break;
-    case 21: // hold
-      envHold = value*200./127.;
-      updateEnvelope();
-      break;
-    case 22: // decay
-      envDecay = value*200./127.;
-      updateEnvelope();
-      break;
-    case 23: // sustain
-      envSustain = value/127.;
-      updateEnvelope();
-      break;
-    case 24: // pulse width
-      pulseWidth = value/127.;
-      updatePulseWidth();
-      break;
-    case 25: // flanger toggle
-      if (value < 2)
+    }
+    }
+    updatePolyMode();
+    break;
+  case 19: // envelope mode
+    allOff();
+    envOn = !envOn;
+    updateEnvelopeMode();
+    break;
+  case 20: // delay
+    envDelay = value*200./127.;
+    updateEnvelope();
+    break;
+  case 21: // hold
+    envHold = value*200./127.;
+    updateEnvelope();
+    break;
+  case 22: // decay
+    envDecay = value*200./127.;
+    updateEnvelope();
+    break;
+  case 23: // sustain
+    envSustain = value/127.;
+    updateEnvelope();
+    break;
+  case 24: // pulse width
+    pulseWidth = value/127.;
+    updatePulseWidth();
+    break;
+  case 25: // flanger toggle
+    if (value < 2)
         flangerOn = bool(value);
-      else
+    else
         flangerOn = !flangerOn;
-      updateFlanger();
-      break;
-    case 26: // flanger offset
-      flangerOffset = int(value/127.*8)*DELAY_LENGTH/8;
-      updateFlanger();
-      break;
-    case 27: // flanger depth
-      flangerDepth = int(value/127.*8)*DELAY_LENGTH/8;
-      updateFlanger();
-      break;
-    case 28: // flanger coarse frequency
-      flangerFreqCoarse = value/127.*10.;
-      updateFlanger();
-      break;
-    case 29: // flanger fine frequency
-      flangerFreqFine = value/127.;
-      updateFlanger();
-      break;
-    case 64: // sustain/damper pedal
-      if (value > 63) {
-        sustainPressed = true;
-      } else {
-        sustainPressed = false;
-        Oscillator *o=oscs, *end=oscs+NVOICES;
-        do {
-          if (o->note != -1 && !notesFind(notesPressed,o->note)) oscOff(*o);
-        } while (++o < end);
-      }
-      break;
-    case 121: // controller reset
-      resetAll();
-      break;
-    case 123: // all notes off
-      allOff();
-      break;
-    default:
+    updateFlanger();
+    break;
+  case 26: // flanger offset
+    flangerOffset = int(value/127.*8)*DELAY_LENGTH/8;
+    updateFlanger();
+    break;
+  case 27: // flanger depth
+    flangerDepth = int(value/127.*8)*DELAY_LENGTH/8;
+    updateFlanger();
+    break;
+  case 28: // flanger coarse frequency
+    flangerFreqCoarse = value/127.*10.;
+    updateFlanger();
+    break;
+  case 29: // flanger fine frequency
+    flangerFreqFine = value/127.;
+    updateFlanger();
+    break;
+  case 64: // sustain/damper pedal
+    if (value > 63) sustainPressed = true;
+    else {
+      sustainPressed = false;
+      Oscillator *o=oscs, *end=oscs+NVOICES;
+      do {
+        if (o->note != -1 && !notesFind(notesPressed,o->note)) oscOff(*o);
+      } while (++o < end);
+    }
+    break;
+  case 65: // portamento on/off
+    if (polyOn) break;
+    if (value > 63) {
+      portamentoOn = true;
+      if (oscs->note != -1) portamentoPos = oscs->note;
+    }
+    else portamentoOn = false;
+    break;
+  case 84: // portamento control (start note)
+    portamentoPos = value;
+    break;
+  case 121: // controller reset
+    resetAll();
+    break;
+  case 123: // all notes off
+    allOff();
+    break;
+  case 124: // omni off
+    allOff();
+    omniOn = false;
+    break;
+  case 125: // omni on
+    allOff();
+    omniOn = true;
+    break;
+  case 126: // mono
+    polyOn = false;
+    portamentoOn = false;
+    updatePolyMode();
+    break;
+  case 127: // poly
+    polyOn = true;
+    portamentoOn = false;
+    updatePolyMode();
+    break;
+  default:
 #ifdef SYNTH_DEBUG
-      Serial1.print("Unhandled Control Change: channel ");
-      Serial1.print(channel);
-      Serial1.print(", control ");
-      Serial1.print(control);
-      Serial1.print(", value ");
-      Serial1.println(value);
+    Serial1.print("Unhandled Control Change: channel ");
+    Serial1.print(channel);
+    Serial1.print(", control ");
+    Serial1.print(control);
+    Serial1.print(", value ");
+    Serial1.println(value);
 #endif
-      break;
+    break;
   }    
+#if 1 //0
+  Serial1.print("Control Change: channel ");
+  Serial1.print(channel);
+  Serial1.print(", control ");
+  Serial1.print(control);
+  Serial1.print(", value ");
+  Serial1.println(value);
+#endif
 }
 
 void OnPitchChange(uint8_t channel, int pitch) {
-#ifdef IGNORE_OTHERCHANNELS
-  if (channel != SYNTH_MIDICHANNEL) return;
-#endif
+  if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.print("PitchChange: channel ");
@@ -733,9 +853,7 @@ void OnPitchChange(uint8_t channel, int pitch) {
 }
 
 void OnProgramChange(uint8_t channel, uint8_t program) {
-#ifdef IGNORE_OTHERCHANNELS
-  if (channel!=SYNTH_MIDICHANNEL) return;
-#endif
+  if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
 #if 0 //#ifdef SYNTH_DEBUG
   Serial1.print("ProgramChange: channel ");
@@ -753,9 +871,7 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
 }
 
 void OnAfterTouch(uint8_t channel, uint8_t pressure) {
-#ifdef IGNORE_OTHERCHANNELS
-  if (channel!=SYNTH_MIDICHANNEL) return;
-#endif
+  if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
 #ifdef SYNTH_DEBUG
   Serial1.print("AfterTouch: channel ");
@@ -840,8 +956,17 @@ void performanceCheck() {
 }
 
 void printInfo() {
-  Serial1.print("Delay line length: ");
+  Serial1.println();
+  Serial1.print("Delay line length:    ");
   Serial1.println(DELAY_LENGTH);
+  Serial1.print("Portamento time:      ");
+  Serial1.println(portamentoTime);
+  Serial1.print("Portamento step:      ");
+  Serial1.println(portamentoStep);
+  Serial1.print("Portamento direction: ");
+  Serial1.println(portamentoDir);
+  Serial1.print("Portamento position:  ");
+  Serial1.println(portamentoPos);
 }
 
 void selectCommand(char c) {

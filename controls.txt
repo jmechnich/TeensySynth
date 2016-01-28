@@ -2,6 +2,7 @@
 CC# | Name                   | Function
 --------------------------------------------------------------------------------
   0 | Bank select            | ignored, only uses program change
+  5 | Portamento time        | changes portamento time       (range: ?)
   7 | Volume                 | changes amplitude for all oscillators
  10 | Panorama               | changes L/R balance
 --------------------------------------------------------------------------------
@@ -21,7 +22,8 @@ CC# | Name                   | Function
  18 | Polyphony mode         | MIDI value
     |                        |   0      poly
     |                        |   1      mono
-    |                        |   2-127  cycles polyphony mode
+    |                        |   2      mono + portamento
+    |                        |   3-127  cycles polyphony mode
 --------------------------------------------------------------------------------
  19 | Envelope mode          | MIDI value
     |                        |   0      envelope off
@@ -32,21 +34,34 @@ CC# | Name                   | Function
  22 | Envelope decay         | changes envelope decay time    (range: 0-200 ms)
  23 | Envelope sustain       | changes envelope sustain level (range: 0.0-1.0)
 --------------------------------------------------------------------------------
- 24 | Pulse width            | changes pulse width of osc. (range: 0.0-1.0)
+ 24 | Pulse width            | changes pulse width of osc.    (range: 0.0-1.0)
 --------------------------------------------------------------------------------
  25 | Flanger mode           | MIDI value
     |                        |   0     flanger off
     |                        |   1     flanger on
     |                        |   2-127 toggle flanger on/off
- 26 | Flanger offset         | changes flanger offset (range: ?)
- 27 | Flanger depth          | changes flanger depth (range: ?)
- 28 | Flanger coarse freq.   | changes flanger frequency (range: 0.0-10.0)
- 29 | Flanger fine freq.     | changes flanger frequency (range: 0.0-1.0)
+ 26 | Flanger offset         | changes flanger offset         (range: ?)
+ 27 | Flanger depth          | changes flanger depth          (range: ?)
+ 28 | Flanger coarse freq.   | changes flanger frequency      (range: 0.0-10.0)
+ 29 | Flanger fine freq.     | changes flanger frequency      (range: 0.0-1.0)
 --------------------------------------------------------------------------------
  64 | Damper pedal/sustain   | MIDI value
     |                        |   0- 63  sustain off
     |                        |  64-127  sustain on
 --------------------------------------------------------------------------------
+ 65 | Portamento on/off      | MIDI value
+    |                        |   0- 63  portamento off
+    |                        |  64-127  portamento on
+    |                        | does nothing if in polyphonic mode
+--------------------------------------------------------------------------------
+ 84 | Portamento control     | sets portamento start note     (range: 0-127)
+--------------------------------------------------------------------------------
 121 | Reset all controllers  | Reset controller values to default
 123 | All notes off          | Switches all oscillators off
+--------------------------------------------------------------------------------
+124 | Omni off               | Receive only on one MIDI channel (default)
+125 | Omni on                | Receive on all MIDI channels
+--------------------------------------------------------------------------------
+126 | Mono on                | Switch to monophonic mode
+127 | Poly on                | Switch to polyphonic mode
 --------------------------------------------------------------------------------
