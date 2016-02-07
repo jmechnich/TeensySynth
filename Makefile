@@ -1,5 +1,6 @@
 ARDUINO_BIN := arduino
 #ARDUINO_BIN := arduino-headless
+ARDUINO_OPTS := --board teensy:avr:teensy31 --pref custom_usb=teensy31_midi --pref custom_keys=teensy31_en-us --pref custom_speed=teensy31_96opt
 
 BUILDDIR    := $(shell pwd)/build
 SKETCH      := $(wildcard *.ino)
@@ -18,7 +19,7 @@ $(BUILDDIR)/$(SKETCH).hex : $(SKETCH) $(BUILDDIR)
 	rm -rf $(BUILDDIR)/preproc
 	rm -rf $(BUILDDIR)/sketch
 # arduino won't exit with a proper return value, parse output instead
-	$(ARDUINO_BIN) --upload --verbose --pref build.path=$(BUILDDIR) $< 2>&1 | tee compilation.out
+	$(ARDUINO_BIN) $(ARDUINO_OPTS) --pref build.path=$(BUILDDIR) --upload --verbose $< 2>&1 | tee compilation.out
 	@! grep -q 'exit status 1\|Error compiling' compilation.out
 
 clean :
