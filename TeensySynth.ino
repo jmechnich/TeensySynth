@@ -1058,6 +1058,7 @@ void setup() {
   flangerR.begin(delaylineR,DELAY_LENGTH,FLANGE_DELAY_PASSTHRU,0,0);
   updateFlanger();
 
+#ifdef USB_MIDI
   usbMIDI.setHandleNoteOff(OnNoteOff);
   usbMIDI.setHandleNoteOn(OnNoteOn);
   usbMIDI.setHandleVelocityChange(OnAfterTouchPoly);
@@ -1068,17 +1069,25 @@ void setup() {
   usbMIDI.setHandleSysEx(OnSysEx);
   //usbMIDI.setHandleRealTimeSystem(OnRealTimeSystem);
   usbMIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
+#endif
  
   delay(1000);
 
 #ifdef SYNTH_DEBUG
   Serial1.println();
   Serial1.println("TeensySynth v0.1");
+#ifdef USB_MIDI
+  Serial1.println("USB_MIDI enabled");
+#else
+  Serial1.println("UART_MIDI enabled");
+#endif
 #endif
 }
 
 void loop() {
+#ifdef USB_MIDI
   usbMIDI.read();
+#endif
   updateMasterVolume();
   updatePortamento();
 
