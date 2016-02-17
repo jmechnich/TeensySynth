@@ -154,7 +154,16 @@ AudioControlSGTL5000     sgtl5000_1;     //xy=80,60
 short delaylineL[DELAY_LENGTH];
 short delaylineR[DELAY_LENGTH];
 
+// audio memory
 #define AMEMORY 50
+
+// switch between USB and UART MIDI
+#ifdef USB_MIDI
+#define SYNTH_SERIAL Serial1
+#else // 'real' MIDI via UART
+#define SYNTH_SERIAL Serial
+#include <MIDI.h>
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // Data types and lookup tables
@@ -212,8 +221,8 @@ bool  velocityOn;
 bool  sustainPressed;
 float channelVolume;
 float panorama;
-float pulseWidth;
-float pitchBend;
+float pulseWidth; // 0.05-0.95
+float pitchBend;  // -1/+1 oct
 
 // filter
 FilterMode_t filterMode;
@@ -343,12 +352,12 @@ void updateFlanger() {
     flangerR.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
     AudioInterrupts();
 #ifdef SYNTH_DEBUG
-    Serial1.print("Flanger: offset=");
-    Serial1.print(flangerOffset);
-    Serial1.print(", depth=");
-    Serial1.print(flangerDepth);
-    Serial1.print(", freq=");
-    Serial1.println(flangerFreqCoarse+flangerFreqFine);    
+    SYNTH_SERIAL.print("Flanger: offset=");
+    SYNTH_SERIAL.print(flangerOffset);
+    SYNTH_SERIAL.print(", depth=");
+    SYNTH_SERIAL.print(flangerDepth);
+    SYNTH_SERIAL.print(", freq=");
+    SYNTH_SERIAL.println(flangerFreqCoarse+flangerFreqFine);    
 #endif
   } else {
     flangerL.voices(FLANGE_DELAY_PASSTHRU,0,0);
@@ -456,8 +465,8 @@ inline void updateMasterVolume() {
     masterVolume = vol;
     sgtl5000_1.volume(masterVolume);
 #ifdef SYNTH_DEBUG
-    Serial1.print("Volume: ");
-    Serial1.println(vol);
+    SYNTH_SERIAL.print("Volume: ");
+    SYNTH_SERIAL.println(vol);
 #endif
   }
 }
@@ -497,14 +506,14 @@ inline void updatePortamento()
 //////////////////////////////////////////////////////////////////////
 inline float noteToFreq(float note) {
   // Sets all notes as an offset of A4 (#69)
+  if (portamentoOn) note = portamentoPos;
   return SYNTH_TUNING*pow(2,(note - 69)/12.+pitchBend);
 }
 
 inline void oscOn(Oscillator& osc, int8_t note, uint8_t velocity) {
   float v = velocityOn ? velocity/127. : 1;
   if (osc.note!=note) {
-    if (portamentoOn) osc.wf->frequency(noteToFreq(portamentoPos));
-    else  osc.wf->frequency(noteToFreq(note));
+    osc.wf->frequency(noteToFreq(note));
     notesAdd(notesOn,note);
     if (envOn && !osc.velocity) osc.env->noteOn();
     osc.wf->amplitude(v*channelVolume*GAIN_OSC);
@@ -541,7 +550,7 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
 #if 0 //#ifdef SYNTH_DEBUG
-  Serial1.println("NoteOn");
+  SYNTH_SERIAL.println("NoteOn");
 #endif
 
   notesAdd(notesPressed,note);
@@ -576,7 +585,7 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     }
     if (!curOsc && *notesOn != -1) {
 #ifdef SYNTH_DEBUG
-      Serial1.println("Stealing voice");
+      SYNTH_SERIAL.println("Stealing voice");
 #endif
       curOsc = OnNoteOffReal(channel,*notesOn,velocity,true);
     }
@@ -596,7 +605,7 @@ Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool 
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return 0;
 
 #if 0 //#ifdef SYNTH_DEBUG
-  Serial1.println("NoteOff");
+  SYNTH_SERIAL.println("NoteOff");
 #endif
   int8_t lastNote = notesDel(notesPressed,note);
   
@@ -659,12 +668,12 @@ inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
 
 void OnAfterTouchPoly(uint8_t channel, uint8_t note, uint8_t value) {
 #ifdef SYNTH_DEBUG
-  Serial1.print("AfterTouchPoly: channel ");
-  Serial1.print(channel);
-  Serial1.print(", note ");
-  Serial1.print(note);
-  Serial1.print(", value ");
-  Serial1.println(value);
+  SYNTH_SERIAL.print("AfterTouchPoly: channel ");
+  SYNTH_SERIAL.print(channel);
+  SYNTH_SERIAL.print(", note ");
+  SYNTH_SERIAL.print(note);
+  SYNTH_SERIAL.print(", value ");
+  SYNTH_SERIAL.println(value);
 #endif
 }
 
@@ -776,7 +785,7 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     updateEnvelope();
     break;
   case 24: // pulse width
-    pulseWidth = value/127.;
+    pulseWidth = (value/127.)*0.9+0.05;
     updatePulseWidth();
     break;
   case 25: // flanger toggle
@@ -849,22 +858,22 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     break;
   default:
 #ifdef SYNTH_DEBUG
-    Serial1.print("Unhandled Control Change: channel ");
-    Serial1.print(channel);
-    Serial1.print(", control ");
-    Serial1.print(control);
-    Serial1.print(", value ");
-    Serial1.println(value);
+    SYNTH_SERIAL.print("Unhandled Control Change: channel ");
+    SYNTH_SERIAL.print(channel);
+    SYNTH_SERIAL.print(", control ");
+    SYNTH_SERIAL.print(control);
+    SYNTH_SERIAL.print(", value ");
+    SYNTH_SERIAL.println(value);
 #endif
     break;
   }    
 #if 1 //0
-  Serial1.print("Control Change: channel ");
-  Serial1.print(channel);
-  Serial1.print(", control ");
-  Serial1.print(control);
-  Serial1.print(", value ");
-  Serial1.println(value);
+  SYNTH_SERIAL.print("Control Change: channel ");
+  SYNTH_SERIAL.print(channel);
+  SYNTH_SERIAL.print(", control ");
+  SYNTH_SERIAL.print(control);
+  SYNTH_SERIAL.print(", value ");
+  SYNTH_SERIAL.println(value);
 #endif
 }
 
@@ -872,16 +881,21 @@ void OnPitchChange(uint8_t channel, int pitch) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
 #if 0 //#ifdef SYNTH_DEBUG
-  Serial1.print("PitchChange: channel ");
-  Serial1.print(channel);
-  Serial1.print(", pitch ");
-  Serial1.println(pitch);
+  SYNTH_SERIAL.print("PitchChange: channel ");
+  SYNTH_SERIAL.print(channel);
+  SYNTH_SERIAL.print(", pitch ");
+  SYNTH_SERIAL.println(pitch);
 #endif
 
+#ifdef USB_MIDI
   if (pitch == 8192)
     pitchBend = 0;
   else
     pitchBend = (pitch-8192)/8192.;
+#else  
+  pitchBend = pitch/8192.;
+#endif
+  
   updatePitch();
 }
 
@@ -889,10 +903,10 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
   if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
 #if 0 //#ifdef SYNTH_DEBUG
-  Serial1.print("ProgramChange: channel ");
-  Serial1.print(channel);
-  Serial1.print(", program ");
-  Serial1.println(program);
+  SYNTH_SERIAL.print("ProgramChange: channel ");
+  SYNTH_SERIAL.print(channel);
+  SYNTH_SERIAL.print(", program ");
+  SYNTH_SERIAL.println(program);
 #endif
 
   if (program <NPROGS) {
@@ -907,34 +921,34 @@ void OnAfterTouch(uint8_t channel, uint8_t pressure) {
   if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
 #ifdef SYNTH_DEBUG
-  Serial1.print("AfterTouch: channel ");
-  Serial1.print(channel);
-  Serial1.print(", pressure ");
-  Serial1.println(pressure);
+  SYNTH_SERIAL.print("AfterTouch: channel ");
+  SYNTH_SERIAL.print(channel);
+  SYNTH_SERIAL.print(", pressure ");
+  SYNTH_SERIAL.println(pressure);
 #endif
 }
 
 void OnSysEx( const uint8_t *data, uint16_t length, bool complete) {
 #ifdef SYNTH_DEBUG
-  Serial1.print("SysEx: length ");
-  Serial1.print(length);
-  Serial1.print(", complete ");
-  Serial1.println(complete);
+  SYNTH_SERIAL.print("SysEx: length ");
+  SYNTH_SERIAL.print(length);
+  SYNTH_SERIAL.print(", complete ");
+  SYNTH_SERIAL.println(complete);
 #endif
 }
 
 void OnRealTimeSystem(uint8_t realtimebyte) {
 #ifdef SYNTH_DEBUG
-  Serial1.print("RealTimeSystem: ");
-  Serial1.println(realtimebyte);
+  SYNTH_SERIAL.print("RealTimeSystem: ");
+  SYNTH_SERIAL.println(realtimebyte);
 #endif
 }
 
 void OnTimeCodeQFrame(uint16_t data)
 {
 #ifdef SYNTH_DEBUG
-  Serial1.print("TimeCodeQuarterFrame: ");
-  Serial1.println(data);
+  SYNTH_SERIAL.print("TimeCodeQuarterFrame: ");
+  SYNTH_SERIAL.println(data);
 #endif
 }
         
@@ -946,31 +960,31 @@ float   statsCpu = 0;
 uint8_t statsMem = 0;
 
 void oscDump(uint8_t idx) {
-  Serial1.print("Oscillator ");
-  Serial1.print(idx);
+  SYNTH_SERIAL.print("Oscillator ");
+  SYNTH_SERIAL.print(idx);
   oscDump(oscs[idx]);
 }
 
 void oscDump(const Oscillator& o) {
-  Serial1.print(" note=");
-  Serial1.print(o.note);
-  Serial1.print(", velocity=");
-  Serial1.println(o.velocity);  
+  SYNTH_SERIAL.print(" note=");
+  SYNTH_SERIAL.print(o.note);
+  SYNTH_SERIAL.print(", velocity=");
+  SYNTH_SERIAL.println(o.velocity);  
 }
 
 inline void notesDump(int8_t* notes) {
   for (uint8_t i=0; i<NVOICES; ++i) {
-    Serial1.print(' ');
-    Serial1.print(notes[i]);
+    SYNTH_SERIAL.print(' ');
+    SYNTH_SERIAL.print(notes[i]);
   }
-  Serial1.println();
+  SYNTH_SERIAL.println();
 }
 
 inline void printResources( float cpu, uint8_t mem) {
-  Serial1.print( "CPU Usage: ");
-  Serial1.print(cpu);
-  Serial1.print( "%, Memory: ");
-  Serial1.println(mem);
+  SYNTH_SERIAL.print( "CPU Usage: ");
+  SYNTH_SERIAL.print(cpu);
+  SYNTH_SERIAL.print( "%, Memory: ");
+  SYNTH_SERIAL.println(mem);
 }
 
 void performanceCheck() {
@@ -992,28 +1006,28 @@ void performanceCheck() {
 }
 
 void printInfo() {
-  Serial1.println();
-  Serial1.print("Delay line length:    ");
-  Serial1.println(DELAY_LENGTH);
-  Serial1.print("Portamento time:      ");
-  Serial1.println(portamentoTime);
-  Serial1.print("Portamento step:      ");
-  Serial1.println(portamentoStep);
-  Serial1.print("Portamento direction: ");
-  Serial1.println(portamentoDir);
-  Serial1.print("Portamento position:  ");
-  Serial1.println(portamentoPos);
+  SYNTH_SERIAL.println();
+  SYNTH_SERIAL.print("Delay line length:    ");
+  SYNTH_SERIAL.println(DELAY_LENGTH);
+  SYNTH_SERIAL.print("Portamento time:      ");
+  SYNTH_SERIAL.println(portamentoTime);
+  SYNTH_SERIAL.print("Portamento step:      ");
+  SYNTH_SERIAL.println(portamentoStep);
+  SYNTH_SERIAL.print("Portamento direction: ");
+  SYNTH_SERIAL.println(portamentoDir);
+  SYNTH_SERIAL.print("Portamento position:  ");
+  SYNTH_SERIAL.println(portamentoPos);
 }
 
 void selectCommand(char c) {
   switch (c) {
     case '\r':
-      Serial1.println();
+      SYNTH_SERIAL.println();
       break;
     case 'b':
-      Serial1.print("Notes Pressed:");
+      SYNTH_SERIAL.print("Notes Pressed:");
       notesDump(notesPressed);
-      Serial1.print("Notes On:     ");
+      SYNTH_SERIAL.print("Notes On:     ");
       notesDump(notesOn);
       break;
     case 'o':
@@ -1028,6 +1042,10 @@ void selectCommand(char c) {
       break;
     case 'i':
       printInfo();
+      break;
+    case '\t':
+      // Reboot Teensy
+      *(uint32_t*)0xE000ED0C = 0x5FA0004;
       break;
     case ' ':
       allOff();
@@ -1044,7 +1062,7 @@ void selectCommand(char c) {
 //////////////////////////////////////////////////////////////////////
 void setup() {
 #ifdef SYNTH_DEBUG
-  Serial1.begin(115200);
+  SYNTH_SERIAL.begin(115200);
 #endif
   
   AudioMemory(AMEMORY);
@@ -1063,37 +1081,52 @@ void setup() {
   usbMIDI.setHandleNoteOn(OnNoteOn);
   usbMIDI.setHandleVelocityChange(OnAfterTouchPoly);
   usbMIDI.setHandleControlChange(OnControlChange);
-  usbMIDI.setHandlePitchChange(OnPitchChange);
+  usbMIDI.setHandlePitchChange(OnPitchChangeUSB);
   usbMIDI.setHandleProgramChange(OnProgramChange);
   usbMIDI.setHandleAfterTouch(OnAfterTouch);
   usbMIDI.setHandleSysEx(OnSysEx);
   //usbMIDI.setHandleRealTimeSystem(OnRealTimeSystem);
   usbMIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
+#else
+  MIDI.begin();
+  MIDI.setHandleNoteOff(OnNoteOff);
+  MIDI.setHandleNoteOn(OnNoteOn);
+  MIDI.setHandleAfterTouchPoly(OnAfterTouchPoly);
+  MIDI.setHandleControlChange(OnControlChange);
+  MIDI.setHandlePitchBend(OnPitchChange);
+  MIDI.setHandleProgramChange(OnProgramChange);
+  MIDI.setHandleAfterTouchChannel(OnAfterTouch);
+  // the following functions need a different callback signature but they are
+  // not used anyways, so...
+  //MIDI.setHandleSystemExclusive(OnSysEx);
+  //MIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
 #endif
  
   delay(1000);
 
 #ifdef SYNTH_DEBUG
-  Serial1.println();
-  Serial1.println("TeensySynth v0.1");
+  SYNTH_SERIAL.println();
+  SYNTH_SERIAL.println("TeensySynth v0.1");
 #ifdef USB_MIDI
-  Serial1.println("USB_MIDI enabled");
+  SYNTH_SERIAL.println("USB_MIDI enabled");
 #else
-  Serial1.println("UART_MIDI enabled");
-#endif
-#endif
+  SYNTH_SERIAL.println("UART_MIDI enabled");
+#endif // USB_MIDI
+#endif // SYNTH_DEBUG
 }
 
 void loop() {
 #ifdef USB_MIDI
   usbMIDI.read();
+#else
+  MIDI.read();
 #endif
   updateMasterVolume();
   updatePortamento();
 
 #ifdef SYNTH_DEBUG
   performanceCheck();
-  while (Serial1.available())
-    selectCommand(Serial1.read());
+  while (SYNTH_SERIAL.available())
+    selectCommand(SYNTH_SERIAL.read());
 #endif
 }

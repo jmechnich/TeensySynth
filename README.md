@@ -2,10 +2,11 @@
 
 ### Features
 * 8-voice polyphony
-* 6 waveforms: sine, square, triangle, sawtooth, reverse sawtooth, pulse
+* 7 waveforms: sine, square, triangle, sawtooth, reverse sawtooth, pulse, sample & hold
 * filter and amplitube envelope per voice
 * MONO and POLY mode
 * Portamento
+* MIDI via USB or serial pins
 
 ### Supported MIDI controls
 * Channel volume

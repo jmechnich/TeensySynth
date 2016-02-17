@@ -1,6 +1,5 @@
 ARDUINO_BIN := arduino
 #ARDUINO_BIN := arduino-headless
-ARDUINO_OPTS := --board teensy:avr:teensy31 --pref custom_usb=teensy31_midi --pref custom_keys=teensy31_en-us --pref custom_speed=teensy31_96opt
 
 BUILDDIR    := $(shell pwd)/build
 SKETCH      := $(wildcard *.ino)
@@ -12,7 +11,14 @@ ifneq ($(words $(SKETCH)),1)
 $(error Multiple sketches in current directory)
 endif
 
+USB_TYPE = teensy31_midi
+
 all: $(BUILDDIR)/$(SKETCH).hex
+
+usbserial: USB_TYPE = teensy31_serial
+usbserial: all
+
+ARDUINO_OPTS = --board teensy:avr:teensy31 --pref custom_usb=$(USB_TYPE) --pref custom_keys=teensy31_en-us --pref custom_speed=teensy31_96opt
 
 $(BUILDDIR)/$(SKETCH).hex : $(SKETCH) $(BUILDDIR)
 # delete a few directories, build otherwise fails
