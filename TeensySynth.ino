@@ -1,7 +1,7 @@
 #include <Audio.h>
 
-// define SYNTH_DEBUG to enable debug logging on HWSerial 1 (digital pins 0/1)
-#define SYNTH_DEBUG
+// set SYNTH_DEBUG to enable debug logging (1=most,2=all messages)
+#define SYNTH_DEBUG 1
 
 // define MIDI channel
 #define SYNTH_MIDICHANNEL 1
@@ -68,7 +68,7 @@ Oscillator oscs[NVOICES] = {
   { &waveform8, &filter8, &mixer8, &envelope8, -1, 0 },
 };
 
-#define NPROGS 7
+#define NPROGS 8
 uint8_t progs[NPROGS] = {
   WAVEFORM_SINE,
   WAVEFORM_SQUARE,
@@ -77,6 +77,7 @@ uint8_t progs[NPROGS] = {
   WAVEFORM_SAWTOOTH_REVERSE,
   WAVEFORM_PULSE,
   WAVEFORM_SAMPLE_HOLD,
+  WAVEFORM_ARBITRARY,
 };
 
 enum FilterMode_t {
@@ -91,7 +92,7 @@ enum FilterMode_t {
 // Global variables
 //////////////////////////////////////////////////////////////////////
 float   masterVolume   = 0.3;
-uint8_t currentProgram = 3;
+uint8_t currentProgram = WAVEFORM_SAWTOOTH;
 
 bool  polyOn;
 bool  omniOn;
@@ -102,6 +103,8 @@ float channelVolume;
 float panorama;
 float pulseWidth; // 0.05-0.95
 float pitchBend;  // -1/+1 oct
+float pitchScale;
+int   octCorr;
 
 // filter
 FilterMode_t filterMode;
@@ -230,7 +233,7 @@ void updateFlanger() {
     flangerL.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
     flangerR.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
     AudioInterrupts();
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
     SYNTH_SERIAL.print("Flanger: offset=");
     SYNTH_SERIAL.print(flangerOffset);
     SYNTH_SERIAL.print(", depth=");
@@ -255,7 +258,9 @@ void resetAll() {
   panorama       = 0.5;
   pulseWidth     = 0.5;
   pitchBend      = 0;
-
+  pitchScale     = 1;
+  octCorr        = currentProgram == WAVEFORM_PULSE ? 1 : 0;
+  
   // filter
   filtFreq = 15000.;
   filtReso = 0.9;
@@ -291,15 +296,18 @@ void resetAll() {
 }
 
 inline void updateProgram() {
+  if (currentProgram==WAVEFORM_PULSE) octCorr = 1;
+  else                   octCorr = 0;
+    
   Oscillator *o=oscs,*end=oscs+NVOICES;
   do {
-    if (currentProgram==5) o->wf->pulseWidth(pulseWidth);
+    if (currentProgram==WAVEFORM_PULSE) o->wf->pulseWidth(pulseWidth);
     o->wf->begin(progs[currentProgram]);
   } while(++o < end);
 }
 
 inline void updatePulseWidth() {
-  if (currentProgram!=5) return;
+  if (currentProgram!=WAVEFORM_PULSE) return;
   Oscillator *o=oscs,*end=oscs+NVOICES;
   do {
     if (o->note < 0) continue;
@@ -343,7 +351,7 @@ inline void updateMasterVolume() {
   if( fabs(vol-masterVolume) > 0.01) {
     masterVolume = vol;
     sgtl5000_1.volume(masterVolume);
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
     SYNTH_SERIAL.print("Volume: ");
     SYNTH_SERIAL.println(vol);
 #endif
@@ -386,7 +394,7 @@ inline void updatePortamento()
 inline float noteToFreq(float note) {
   // Sets all notes as an offset of A4 (#69)
   if (portamentoOn) note = portamentoPos;
-  return SYNTH_TUNING*pow(2,(note - 69)/12.+pitchBend);
+  return SYNTH_TUNING*pow(2,(note - 69)/12.+pitchBend/pitchScale+octCorr);
 }
 
 inline void oscOn(Oscillator& osc, int8_t note, uint8_t velocity) {
@@ -428,7 +436,7 @@ inline void allOff() {
 void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
-#if 0 //#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 1
   SYNTH_SERIAL.println("NoteOn");
 #endif
 
@@ -463,7 +471,7 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
       }
     }
     if (!curOsc && *notesOn != -1) {
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
       SYNTH_SERIAL.println("Stealing voice");
 #endif
       curOsc = OnNoteOffReal(channel,*notesOn,velocity,true);
@@ -546,7 +554,7 @@ inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
 }
 
 void OnAfterTouchPoly(uint8_t channel, uint8_t note, uint8_t value) {
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.print("AfterTouchPoly: channel ");
   SYNTH_SERIAL.print(channel);
   SYNTH_SERIAL.print(", note ");
@@ -690,6 +698,9 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     flangerFreqFine = value/127.;
     updateFlanger();
     break;
+  case 30: // pitch range in semitones
+    pitchScale = 12./value;
+    break;
   case 64: // sustain/damper pedal
     if (value > 63) sustainPressed = true;
     else {
@@ -736,7 +747,7 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     updatePolyMode();
     break;
   default:
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
     SYNTH_SERIAL.print("Unhandled Control Change: channel ");
     SYNTH_SERIAL.print(channel);
     SYNTH_SERIAL.print(", control ");
@@ -759,7 +770,7 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
 void OnPitchChange(uint8_t channel, int pitch) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
-#if 0 //#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 1
   SYNTH_SERIAL.print("PitchChange: channel ");
   SYNTH_SERIAL.print(channel);
   SYNTH_SERIAL.print(", pitch ");
@@ -781,7 +792,7 @@ void OnPitchChange(uint8_t channel, int pitch) {
 void OnProgramChange(uint8_t channel, uint8_t program) {
   if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
-#if 0 //#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 1
   SYNTH_SERIAL.print("ProgramChange: channel ");
   SYNTH_SERIAL.print(channel);
   SYNTH_SERIAL.print(", program ");
@@ -799,7 +810,7 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
 void OnAfterTouch(uint8_t channel, uint8_t pressure) {
   if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.print("AfterTouch: channel ");
   SYNTH_SERIAL.print(channel);
   SYNTH_SERIAL.print(", pressure ");
@@ -808,7 +819,7 @@ void OnAfterTouch(uint8_t channel, uint8_t pressure) {
 }
 
 void OnSysEx( const uint8_t *data, uint16_t length, bool complete) {
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.print("SysEx: length ");
   SYNTH_SERIAL.print(length);
   SYNTH_SERIAL.print(", complete ");
@@ -817,7 +828,7 @@ void OnSysEx( const uint8_t *data, uint16_t length, bool complete) {
 }
 
 void OnRealTimeSystem(uint8_t realtimebyte) {
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.print("RealTimeSystem: ");
   SYNTH_SERIAL.println(realtimebyte);
 #endif
@@ -825,7 +836,7 @@ void OnRealTimeSystem(uint8_t realtimebyte) {
 
 void OnTimeCodeQFrame(uint16_t data)
 {
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.print("TimeCodeQuarterFrame: ");
   SYNTH_SERIAL.println(data);
 #endif
@@ -834,7 +845,7 @@ void OnTimeCodeQFrame(uint16_t data)
 //////////////////////////////////////////////////////////////////////
 // Debugging functions
 //////////////////////////////////////////////////////////////////////
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
 float   statsCpu = 0;
 uint8_t statsMem = 0;
 
@@ -1001,11 +1012,13 @@ void selectCommand(char c) {
 
 #endif
 
+#include "saw.h"
+
 //////////////////////////////////////////////////////////////////////
 // setup() and loop()
 //////////////////////////////////////////////////////////////////////
 void setup() {
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.begin(115200);
 #endif
   
@@ -1013,6 +1026,13 @@ void setup() {
   sgtl5000_1.enable();
   sgtl5000_1.volume(masterVolume);
 
+  {
+    Oscillator *o=oscs,*end=oscs+NVOICES;
+    do {
+      o->wf->arbitraryWaveform(reinterpret_cast<const int16_t*>(saw),0);
+    } while(++o < end);
+  }
+  
   resetAll();
   updateProgram();
   
@@ -1048,7 +1068,7 @@ void setup() {
  
   delay(1000);
 
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   SYNTH_SERIAL.println();
   SYNTH_SERIAL.println("TeensySynth v0.1");
 #ifdef USB_MIDI
@@ -1068,7 +1088,7 @@ void loop() {
   updateMasterVolume();
   updatePortamento();
 
-#ifdef SYNTH_DEBUG
+#if SYNTH_DEBUG > 0
   performanceCheck();
   while (SYNTH_SERIAL.available())
     selectCommand(SYNTH_SERIAL.read());
