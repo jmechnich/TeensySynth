@@ -11,14 +11,14 @@ ifneq ($(words $(SKETCH)),1)
 $(error Multiple sketches in current directory)
 endif
 
-USB_TYPE = teensy31_midi
+USB_TYPE = midi
 
 all: $(BUILDDIR)/$(SKETCH).hex
 
-usbserial: USB_TYPE = teensy31_serial
+usbserial: USB_TYPE = serial
 usbserial: all
 
-ARDUINO_OPTS = --board teensy:avr:teensy31 --pref custom_usb=$(USB_TYPE) --pref custom_keys=teensy31_en-us --pref custom_speed=teensy31_96opt
+ARDUINO_OPTS = --board teensy:avr:teensy31:usb=$(USB_TYPE),speed=96,keys=en-us
 
 $(BUILDDIR)/$(SKETCH).hex : $(SKETCH) $(BUILDDIR)
 # delete a few directories, build otherwise fails
