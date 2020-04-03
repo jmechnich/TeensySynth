@@ -39,6 +39,7 @@ short delaylineR[DELAY_LENGTH];
 #else // 'real' MIDI via UART
 #define SYNTH_SERIAL Serial
 #include <MIDI.h>
+MIDI_CREATE_INSTANCE(HardwareSerial, Serial, MIDI);
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -1041,17 +1042,19 @@ void setup() {
   updateFlanger();
 
 #ifdef USB_MIDI
+  // see arduino/hardware/teensy/avr/libraries/USBHost_t36/USBHost_t36.h
   usbMIDI.setHandleNoteOff(OnNoteOff);
   usbMIDI.setHandleNoteOn(OnNoteOn);
   usbMIDI.setHandleVelocityChange(OnAfterTouchPoly);
   usbMIDI.setHandleControlChange(OnControlChange);
-  usbMIDI.setHandlePitchChange(OnPitchChangeUSB);
+  usbMIDI.setHandlePitchChange(OnPitchChange);
   usbMIDI.setHandleProgramChange(OnProgramChange);
   usbMIDI.setHandleAfterTouch(OnAfterTouch);
   usbMIDI.setHandleSysEx(OnSysEx);
   //usbMIDI.setHandleRealTimeSystem(OnRealTimeSystem);
   usbMIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
 #else
+  // see arduino/hardware/teensy/avr/libraries/MIDI/src/MIDI.h
   MIDI.begin();
   MIDI.setHandleNoteOff(OnNoteOff);
   MIDI.setHandleNoteOn(OnNoteOn);
