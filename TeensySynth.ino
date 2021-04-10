@@ -1,7 +1,7 @@
 #include <Audio.h>
 
-// set SYNTH_DEBUG to enable debug logging (1=most,2=all messages)
-#define SYNTH_DEBUG 1
+// set SYNTH_DEBUG to enable debug logging (0=off,1=most,2=all messages)
+#define SYNTH_DEBUG 0
 
 // define MIDI channel
 #define SYNTH_MIDICHANNEL 1
@@ -34,13 +34,14 @@ short delaylineR[DELAY_LENGTH];
 #define AMEMORY 50
 
 // switch between USB and UART MIDI
-#ifdef USB_MIDI
-#define SYNTH_SERIAL Serial1
-#else // 'real' MIDI via UART
-#define SYNTH_SERIAL Serial
-#include <MIDI.h>
-MIDI_CREATE_INSTANCE(HardwareSerial, Serial, MIDI);
+#if defined USB_MIDI || defined USB_MIDI_SERIAL
+#define SYNTH_USBMIDI
 #endif
+
+#define SYNTH_COM Serial
+
+#include <MIDI.h>
+MIDI_CREATE_DEFAULT_INSTANCE();
 
 //////////////////////////////////////////////////////////////////////
 // Data types and lookup tables
@@ -235,16 +236,16 @@ void updateFlanger() {
     flangerR.voices(flangerOffset,flangerDepth,flangerFreqCoarse+flangerFreqFine);
     AudioInterrupts();
 #if SYNTH_DEBUG > 0
-    SYNTH_SERIAL.print("Flanger: offset=");
-    SYNTH_SERIAL.print(flangerOffset);
-    SYNTH_SERIAL.print(", depth=");
-    SYNTH_SERIAL.print(flangerDepth);
-    SYNTH_SERIAL.print(", freq=");
-    SYNTH_SERIAL.println(flangerFreqCoarse+flangerFreqFine);    
+    SYNTH_COM.print("Flanger: offset=");
+    SYNTH_COM.print(flangerOffset);
+    SYNTH_COM.print(", depth=");
+    SYNTH_COM.print(flangerDepth);
+    SYNTH_COM.print(", freq=");
+    SYNTH_COM.println(flangerFreqCoarse+flangerFreqFine);
 #endif
   } else {
     flangerL.voices(FLANGE_DELAY_PASSTHRU,0,0);
-    flangerR.voices(FLANGE_DELAY_PASSTHRU,0,0);        
+    flangerR.voices(FLANGE_DELAY_PASSTHRU,0,0);
   }
 }
 
@@ -252,7 +253,7 @@ void resetAll() {
   polyOn     = true;
   omniOn     = false;
   velocityOn = true;
-  
+
   filterMode     = FILTEROFF;
   sustainPressed = false;
   channelVolume  = 1.0;
@@ -261,14 +262,14 @@ void resetAll() {
   pitchBend      = 0;
   pitchScale     = 1;
   octCorr        = currentProgram == WAVEFORM_PULSE ? 1 : 0;
-  
+
   // filter
   filtFreq = 15000.;
   filtReso = 0.9;
   filtAtt  = 1.;
 
   // envelope
-  envOn      = false;
+  envOn      = true;
   envDelay   = 0;
   envAttack  = 20;
   envHold    = 0;
@@ -299,7 +300,7 @@ void resetAll() {
 inline void updateProgram() {
   if (currentProgram==WAVEFORM_PULSE) octCorr = 1;
   else                   octCorr = 0;
-    
+
   Oscillator *o=oscs,*end=oscs+NVOICES;
   do {
     if (currentProgram==WAVEFORM_PULSE) o->wf->pulseWidth(pulseWidth);
@@ -353,8 +354,8 @@ inline void updateMasterVolume() {
     masterVolume = vol;
     sgtl5000_1.volume(masterVolume);
 #if SYNTH_DEBUG > 0
-    SYNTH_SERIAL.print("Volume: ");
-    SYNTH_SERIAL.println(vol);
+    SYNTH_COM.print("Volume: ");
+    SYNTH_COM.println(vol);
 #endif
   }
 }
@@ -438,7 +439,7 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
 #if SYNTH_DEBUG > 1
-  SYNTH_SERIAL.println("NoteOn");
+  SYNTH_COM.println("NoteOn");
 #endif
 
   notesAdd(notesPressed,note);
@@ -473,14 +474,14 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     }
     if (!curOsc && *notesOn != -1) {
 #if SYNTH_DEBUG > 0
-      SYNTH_SERIAL.println("Stealing voice");
+      SYNTH_COM.println("Stealing voice");
 #endif
       curOsc = OnNoteOffReal(channel,*notesOn,velocity,true);
     }
     if (!curOsc) return;
     oscOn(*curOsc, note, velocity);
   }
-  else 
+  else
   {
     *notesOn = -1;
     oscOn(*o, note, velocity);
@@ -492,11 +493,11 @@ void OnNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool ignoreSustain) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return 0;
 
-#if 0 //#ifdef SYNTH_DEBUG
-  SYNTH_SERIAL.println("NoteOff");
+#if SYNTH_DEBUG > 1
+  SYNTH_COM.println("NoteOff");
 #endif
   int8_t lastNote = notesDel(notesPressed,note);
-  
+
   if (sustainPressed && !ignoreSustain) return 0;
 
   Oscillator *o=oscs;
@@ -513,7 +514,7 @@ Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool 
         }
         oscOn(*o, lastNote, velocity);
       }
-      else 
+      else
       {
         oscOff(*o);
         portamentoPos = -1;
@@ -546,7 +547,7 @@ Oscillator* OnNoteOffReal(uint8_t channel, uint8_t note, uint8_t velocity, bool 
       }
     }
   }
-  
+
   return o;
 }
 
@@ -556,12 +557,12 @@ inline void OnNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
 
 void OnAfterTouchPoly(uint8_t channel, uint8_t note, uint8_t value) {
 #if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.print("AfterTouchPoly: channel ");
-  SYNTH_SERIAL.print(channel);
-  SYNTH_SERIAL.print(", note ");
-  SYNTH_SERIAL.print(note);
-  SYNTH_SERIAL.print(", value ");
-  SYNTH_SERIAL.println(value);
+  SYNTH_COM.print("AfterTouchPoly: channel ");
+  SYNTH_COM.print(channel);
+  SYNTH_COM.print(", note ");
+  SYNTH_COM.print(note);
+  SYNTH_COM.print(", value ");
+  SYNTH_COM.println(value);
 #endif
 }
 
@@ -608,7 +609,9 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     updateEnvelope();
     break;
   case 14: // filter frequency
-    filtFreq = value/2.5*AUDIO_SAMPLE_RATE_EXACT/127.;
+    //filtFreq = value/2.5*AUDIO_SAMPLE_RATE_EXACT/127.;
+    filtFreq = float(pow(value, 2));
+    //filtFreq = float(pow(value, 3)/127.);
     updateFilter();
     break;
   case 15: // filter resonance
@@ -749,22 +752,22 @@ void OnControlChange(uint8_t channel, uint8_t control, uint8_t value) {
     break;
   default:
 #if SYNTH_DEBUG > 0
-    SYNTH_SERIAL.print("Unhandled Control Change: channel ");
-    SYNTH_SERIAL.print(channel);
-    SYNTH_SERIAL.print(", control ");
-    SYNTH_SERIAL.print(control);
-    SYNTH_SERIAL.print(", value ");
-    SYNTH_SERIAL.println(value);
+    SYNTH_COM.print("Unhandled Control Change: channel ");
+    SYNTH_COM.print(channel);
+    SYNTH_COM.print(", control ");
+    SYNTH_COM.print(control);
+    SYNTH_COM.print(", value ");
+    SYNTH_COM.println(value);
 #endif
     break;
-  }    
+  }
 #if 1 //0
-  SYNTH_SERIAL.print("Control Change: channel ");
-  SYNTH_SERIAL.print(channel);
-  SYNTH_SERIAL.print(", control ");
-  SYNTH_SERIAL.print(control);
-  SYNTH_SERIAL.print(", value ");
-  SYNTH_SERIAL.println(value);
+  SYNTH_COM.print("Control Change: channel ");
+  SYNTH_COM.print(channel);
+  SYNTH_COM.print(", control ");
+  SYNTH_COM.print(control);
+  SYNTH_COM.print(", value ");
+  SYNTH_COM.println(value);
 #endif
 }
 
@@ -772,21 +775,21 @@ void OnPitchChange(uint8_t channel, int pitch) {
   if (!omniOn && channel != SYNTH_MIDICHANNEL) return;
 
 #if SYNTH_DEBUG > 1
-  SYNTH_SERIAL.print("PitchChange: channel ");
-  SYNTH_SERIAL.print(channel);
-  SYNTH_SERIAL.print(", pitch ");
-  SYNTH_SERIAL.println(pitch);
+  SYNTH_COM.print("PitchChange: channel ");
+  SYNTH_COM.print(channel);
+  SYNTH_COM.print(", pitch ");
+  SYNTH_COM.println(pitch);
 #endif
 
-#ifdef USB_MIDI
+#ifdef SYNTH_USBMIDI
   if (pitch == 8192)
     pitchBend = 0;
   else
     pitchBend = (pitch-8192)/8192.;
-#else  
+#else
   pitchBend = pitch/8192.;
 #endif
-  
+
   updatePitch();
 }
 
@@ -794,10 +797,10 @@ void OnProgramChange(uint8_t channel, uint8_t program) {
   if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
 #if SYNTH_DEBUG > 1
-  SYNTH_SERIAL.print("ProgramChange: channel ");
-  SYNTH_SERIAL.print(channel);
-  SYNTH_SERIAL.print(", program ");
-  SYNTH_SERIAL.println(program);
+  SYNTH_COM.print("ProgramChange: channel ");
+  SYNTH_COM.print(channel);
+  SYNTH_COM.print(", program ");
+  SYNTH_COM.println(program);
 #endif
 
   if (program <NPROGS) {
@@ -812,37 +815,37 @@ void OnAfterTouch(uint8_t channel, uint8_t pressure) {
   if (!omniOn && channel!=SYNTH_MIDICHANNEL) return;
 
 #if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.print("AfterTouch: channel ");
-  SYNTH_SERIAL.print(channel);
-  SYNTH_SERIAL.print(", pressure ");
-  SYNTH_SERIAL.println(pressure);
+  SYNTH_COM.print("AfterTouch: channel ");
+  SYNTH_COM.print(channel);
+  SYNTH_COM.print(", pressure ");
+  SYNTH_COM.println(pressure);
 #endif
 }
 
 void OnSysEx( const uint8_t *data, uint16_t length, bool complete) {
 #if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.print("SysEx: length ");
-  SYNTH_SERIAL.print(length);
-  SYNTH_SERIAL.print(", complete ");
-  SYNTH_SERIAL.println(complete);
+  SYNTH_COM.print("SysEx: length ");
+  SYNTH_COM.print(length);
+  SYNTH_COM.print(", complete ");
+  SYNTH_COM.println(complete);
 #endif
 }
 
 void OnRealTimeSystem(uint8_t realtimebyte) {
 #if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.print("RealTimeSystem: ");
-  SYNTH_SERIAL.println(realtimebyte);
+  SYNTH_COM.print("RealTimeSystem: ");
+  SYNTH_COM.println(realtimebyte);
 #endif
 }
 
 void OnTimeCodeQFrame(uint16_t data)
 {
 #if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.print("TimeCodeQuarterFrame: ");
-  SYNTH_SERIAL.println(data);
+  SYNTH_COM.print("TimeCodeQuarterFrame: ");
+  SYNTH_COM.println(data);
 #endif
 }
-        
+
 //////////////////////////////////////////////////////////////////////
 // Debugging functions
 //////////////////////////////////////////////////////////////////////
@@ -851,31 +854,31 @@ float   statsCpu = 0;
 uint8_t statsMem = 0;
 
 void oscDump(uint8_t idx) {
-  SYNTH_SERIAL.print("Oscillator ");
-  SYNTH_SERIAL.print(idx);
+  SYNTH_COM.print("Oscillator ");
+  SYNTH_COM.print(idx);
   oscDump(oscs[idx]);
 }
 
 void oscDump(const Oscillator& o) {
-  SYNTH_SERIAL.print(" note=");
-  SYNTH_SERIAL.print(o.note);
-  SYNTH_SERIAL.print(", velocity=");
-  SYNTH_SERIAL.println(o.velocity);  
+  SYNTH_COM.print(" note=");
+  SYNTH_COM.print(o.note);
+  SYNTH_COM.print(", velocity=");
+  SYNTH_COM.println(o.velocity);
 }
 
 inline void notesDump(int8_t* notes) {
   for (uint8_t i=0; i<NVOICES; ++i) {
-    SYNTH_SERIAL.print(' ');
-    SYNTH_SERIAL.print(notes[i]);
+    SYNTH_COM.print(' ');
+    SYNTH_COM.print(notes[i]);
   }
-  SYNTH_SERIAL.println();
+  SYNTH_COM.println();
 }
 
 inline void printResources( float cpu, uint8_t mem) {
-  SYNTH_SERIAL.print( "CPU Usage: ");
-  SYNTH_SERIAL.print(cpu);
-  SYNTH_SERIAL.print( "%, Memory: ");
-  SYNTH_SERIAL.println(mem);
+  SYNTH_COM.print( "CPU Usage: ");
+  SYNTH_COM.print(cpu);
+  SYNTH_COM.print( "%, Memory: ");
+  SYNTH_COM.println(mem);
 }
 
 void performanceCheck() {
@@ -887,7 +890,7 @@ void performanceCheck() {
     uint8_t mem = AudioMemoryUsageMax();
     if( (statsMem!=mem) || fabs(statsCpu-cpu)>1) {
       printResources( cpu, mem);
-    }   
+    }
     AudioProcessorUsageMaxReset();
     AudioMemoryUsageMaxReset();
     last = now;
@@ -897,88 +900,98 @@ void performanceCheck() {
 }
 
 void printInfo() {
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.print("Master Volume:        ");
-  SYNTH_SERIAL.println(masterVolume);
-  SYNTH_SERIAL.print("Current Program:      ");
-  SYNTH_SERIAL.println(currentProgram);
-  SYNTH_SERIAL.print("Poly On:              ");
-  SYNTH_SERIAL.println(polyOn);
-  SYNTH_SERIAL.print("Omni On:              ");
-  SYNTH_SERIAL.println(omniOn);
-  SYNTH_SERIAL.print("Velocity On:          ");
-  SYNTH_SERIAL.println(velocityOn);
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.print("Sustain Pressed:      ");
-  SYNTH_SERIAL.println(sustainPressed);
-  SYNTH_SERIAL.print("Channel Volume:       ");
-  SYNTH_SERIAL.println(channelVolume);
-  SYNTH_SERIAL.print("Panorama:             ");
-  SYNTH_SERIAL.println(panorama);
-  SYNTH_SERIAL.print("Pulse Width:          ");
-  SYNTH_SERIAL.println(pulseWidth);
-  SYNTH_SERIAL.print("Pitch Bend:           ");
-  SYNTH_SERIAL.println(pitchBend);
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.print("Filter Mode:          ");
-  SYNTH_SERIAL.println(filterMode);
-  SYNTH_SERIAL.print("Filter Frequency:     ");
-  SYNTH_SERIAL.println(filtFreq);
-  SYNTH_SERIAL.print("Filter Resonance:     ");
-  SYNTH_SERIAL.println(filtReso);
-  SYNTH_SERIAL.print("Filter Attenuation:   ");
-  SYNTH_SERIAL.println(filtAtt);
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.print("Envelope On:          ");
-  SYNTH_SERIAL.println(envOn);
-  SYNTH_SERIAL.print("Envelope Delay:       ");
-  SYNTH_SERIAL.println(envDelay);
-  SYNTH_SERIAL.print("Envelope Attack:      ");
-  SYNTH_SERIAL.println(envAttack);
-  SYNTH_SERIAL.print("Envelope Hold:        ");
-  SYNTH_SERIAL.println(envHold);
-  SYNTH_SERIAL.print("Envelope Decay:       ");
-  SYNTH_SERIAL.println(envDecay);
-  SYNTH_SERIAL.print("Envelope Sustain:     ");
-  SYNTH_SERIAL.println(envSustain);
-  SYNTH_SERIAL.print("Envelope Release:     ");
-  SYNTH_SERIAL.println(envRelease);
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.print("Flanger On:           ");
-  SYNTH_SERIAL.println(flangerOn);
-  SYNTH_SERIAL.print("Flanger Offset:       ");
-  SYNTH_SERIAL.println(flangerOffset);
-  SYNTH_SERIAL.print("Flanger Depth:        ");
-  SYNTH_SERIAL.println(flangerDepth);
-  SYNTH_SERIAL.print("Flanger Freq. Coarse: ");
-  SYNTH_SERIAL.println(flangerFreqCoarse);
-  SYNTH_SERIAL.print("Flanger Freq. Fine:   ");
-  SYNTH_SERIAL.println(flangerFreqFine);
-  SYNTH_SERIAL.print("Delay Line Length:    ");
-  SYNTH_SERIAL.println(DELAY_LENGTH);
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.print("Portamento On:        ");
-  SYNTH_SERIAL.println(portamentoOn);
-  SYNTH_SERIAL.print("Portamento Time:      ");
-  SYNTH_SERIAL.println(portamentoTime);
-  SYNTH_SERIAL.print("Portamento Step:      ");
-  SYNTH_SERIAL.println(portamentoStep);
-  SYNTH_SERIAL.print("Portamento Direction: ");
-  SYNTH_SERIAL.println(portamentoDir);
-  SYNTH_SERIAL.print("Portamento Position:  ");
-  SYNTH_SERIAL.println(portamentoPos);
+  SYNTH_COM.println();
+  SYNTH_COM.print("Master Volume:        ");
+  SYNTH_COM.println(masterVolume);
+  SYNTH_COM.print("Current Program:      ");
+  SYNTH_COM.println(currentProgram);
+  SYNTH_COM.print("Poly On:              ");
+  SYNTH_COM.println(polyOn);
+  SYNTH_COM.print("Omni On:              ");
+  SYNTH_COM.println(omniOn);
+  SYNTH_COM.print("Velocity On:          ");
+  SYNTH_COM.println(velocityOn);
+  SYNTH_COM.println();
+  SYNTH_COM.print("Sustain Pressed:      ");
+  SYNTH_COM.println(sustainPressed);
+  SYNTH_COM.print("Channel Volume:       ");
+  SYNTH_COM.println(channelVolume);
+  SYNTH_COM.print("Panorama:             ");
+  SYNTH_COM.println(panorama);
+  SYNTH_COM.print("Pulse Width:          ");
+  SYNTH_COM.println(pulseWidth);
+  SYNTH_COM.print("Pitch Bend:           ");
+  SYNTH_COM.println(pitchBend);
+  SYNTH_COM.println();
+  SYNTH_COM.print("Filter Mode:          ");
+  SYNTH_COM.println(filterMode);
+  SYNTH_COM.print("Filter Frequency:     ");
+  SYNTH_COM.println(filtFreq);
+  SYNTH_COM.print("Filter Resonance:     ");
+  SYNTH_COM.println(filtReso);
+  SYNTH_COM.print("Filter Attenuation:   ");
+  SYNTH_COM.println(filtAtt);
+  SYNTH_COM.println();
+  SYNTH_COM.print("Envelope On:          ");
+  SYNTH_COM.println(envOn);
+  SYNTH_COM.print("Envelope Delay:       ");
+  SYNTH_COM.println(envDelay);
+  SYNTH_COM.print("Envelope Attack:      ");
+  SYNTH_COM.println(envAttack);
+  SYNTH_COM.print("Envelope Hold:        ");
+  SYNTH_COM.println(envHold);
+  SYNTH_COM.print("Envelope Decay:       ");
+  SYNTH_COM.println(envDecay);
+  SYNTH_COM.print("Envelope Sustain:     ");
+  SYNTH_COM.println(envSustain);
+  SYNTH_COM.print("Envelope Release:     ");
+  SYNTH_COM.println(envRelease);
+  SYNTH_COM.println();
+  SYNTH_COM.print("Flanger On:           ");
+  SYNTH_COM.println(flangerOn);
+  SYNTH_COM.print("Flanger Offset:       ");
+  SYNTH_COM.println(flangerOffset);
+  SYNTH_COM.print("Flanger Depth:        ");
+  SYNTH_COM.println(flangerDepth);
+  SYNTH_COM.print("Flanger Freq. Coarse: ");
+  SYNTH_COM.println(flangerFreqCoarse);
+  SYNTH_COM.print("Flanger Freq. Fine:   ");
+  SYNTH_COM.println(flangerFreqFine);
+  SYNTH_COM.print("Delay Line Length:    ");
+  SYNTH_COM.println(DELAY_LENGTH);
+  SYNTH_COM.println();
+  SYNTH_COM.print("Portamento On:        ");
+  SYNTH_COM.println(portamentoOn);
+  SYNTH_COM.print("Portamento Time:      ");
+  SYNTH_COM.println(portamentoTime);
+  SYNTH_COM.print("Portamento Step:      ");
+  SYNTH_COM.println(portamentoStep);
+  SYNTH_COM.print("Portamento Direction: ");
+  SYNTH_COM.println(portamentoDir);
+  SYNTH_COM.print("Portamento Position:  ");
+  SYNTH_COM.println(portamentoPos);
+}
+
+void printAbout()
+{
+  SYNTH_COM.println();
+  SYNTH_COM.println("TeensySynth v0.1");
+#ifdef SYNTH_USBMIDI
+  SYNTH_COM.println("USB_MIDI enabled");
+#endif
+  SYNTH_COM.println("UART_MIDI enabled");
 }
 
 void selectCommand(char c) {
   switch (c) {
   case '\r':
-    SYNTH_SERIAL.println();
+    SYNTH_COM.println();
     break;
   case 'b':
     // print voice statistics
-    SYNTH_SERIAL.print("Notes Pressed:");
+    SYNTH_COM.print("Notes Pressed:");
     notesDump(notesPressed);
-    SYNTH_SERIAL.print("Notes On:     ");
+    SYNTH_COM.print("Notes On:     ");
     notesDump(notesOn);
     break;
   case 'o':
@@ -998,6 +1011,10 @@ void selectCommand(char c) {
     // print info
     printInfo();
     break;
+  case '?':
+    // print about
+    printAbout();
+    break;
   case '\t':
     // reboot Teensy
     *(uint32_t*)0xE000ED0C = 0x5FA0004;
@@ -1008,7 +1025,7 @@ void selectCommand(char c) {
     break;
   default:
     break;
-  }  
+  }
 }
 
 #endif
@@ -1019,10 +1036,8 @@ void selectCommand(char c) {
 // setup() and loop()
 //////////////////////////////////////////////////////////////////////
 void setup() {
-#if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.begin(115200);
-#endif
-  
+  SYNTH_COM.begin(115200);
+
   AudioMemory(AMEMORY);
   sgtl5000_1.enable();
   sgtl5000_1.volume(masterVolume);
@@ -1033,15 +1048,15 @@ void setup() {
       o->wf->arbitraryWaveform(reinterpret_cast<const int16_t*>(saw),0);
     } while(++o < end);
   }
-  
+
   resetAll();
   updateProgram();
-  
+
   flangerL.begin(delaylineL,DELAY_LENGTH,FLANGE_DELAY_PASSTHRU,0,0);
   flangerR.begin(delaylineR,DELAY_LENGTH,FLANGE_DELAY_PASSTHRU,0,0);
   updateFlanger();
 
-#ifdef USB_MIDI
+#ifdef SYNTH_USBMIDI
   // see arduino/hardware/teensy/avr/libraries/USBHost_t36/USBHost_t36.h
   usbMIDI.setHandleNoteOff(OnNoteOff);
   usbMIDI.setHandleNoteOn(OnNoteOn);
@@ -1053,7 +1068,7 @@ void setup() {
   usbMIDI.setHandleSysEx(OnSysEx);
   //usbMIDI.setHandleRealTimeSystem(OnRealTimeSystem);
   usbMIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
-#else
+#endif
   // see arduino/hardware/teensy/avr/libraries/MIDI/src/MIDI.h
   MIDI.begin();
   MIDI.setHandleNoteOff(OnNoteOff);
@@ -1067,33 +1082,22 @@ void setup() {
   // not used anyways, so...
   //MIDI.setHandleSystemExclusive(OnSysEx);
   //MIDI.setHandleTimeCodeQuarterFrame(OnTimeCodeQFrame);
-#endif
- 
-  delay(1000);
 
-#if SYNTH_DEBUG > 0
-  SYNTH_SERIAL.println();
-  SYNTH_SERIAL.println("TeensySynth v0.1");
-#ifdef USB_MIDI
-  SYNTH_SERIAL.println("USB_MIDI enabled");
-#else
-  SYNTH_SERIAL.println("UART_MIDI enabled");
-#endif // USB_MIDI
-#endif // SYNTH_DEBUG
+  delay(1000);
 }
 
 void loop() {
-#ifdef USB_MIDI
+#ifdef SYNTH_USBMIDI
   usbMIDI.read();
-#else
-  MIDI.read();
 #endif
+  MIDI.read();
+
   updateMasterVolume();
   updatePortamento();
 
 #if SYNTH_DEBUG > 0
   performanceCheck();
-  while (SYNTH_SERIAL.available())
-    selectCommand(SYNTH_SERIAL.read());
+  while (SYNTH_COM.available())
+    selectCommand(SYNTH_COM.read());
 #endif
 }
